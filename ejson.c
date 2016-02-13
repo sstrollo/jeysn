@@ -16,15 +16,17 @@ static ERL_NIF_TERM am_json_token_false;
 static ERL_NIF_TERM am_json_token_null;
 static ERL_NIF_TERM am_json_token_true;
 static ERL_NIF_TERM am_more;
-static ERL_NIF_TERM am_end;
+static ERL_NIF_TERM am_eof;
 static ERL_NIF_TERM am_token;
 static ERL_NIF_TERM am_string;
 static ERL_NIF_TERM am_number;
 static ERL_NIF_TERM am_error;
+static ERL_NIF_TERM am_ok;
 
 
 typedef struct ejson_state {
     int string_format;     /* 1 binary, 2 string, 3 atom, 4 existing atom */
+    int eof;
     unsigned int lineno;
     uchar *buf;
     uchar *ptr;
@@ -136,29 +138,68 @@ static ERL_NIF_TERM next_token(ErlNifEnv* env,
                                int argc, const ERL_NIF_TERM argv[])
 {
     ejson_state_t *ejs = NULL;
-    ErlNifBinary bin;
-    int string_as = 0, end_as_more = 0;
+    int string_format = 0;
     if (!enif_get_resource(env, argv[0], ejson_state_type, (void **)&ejs)) {
         return enif_make_badarg(env);
     }
-    if (!enif_get_int(env, argv[2], &string_as)) {
+    if (!enif_get_int(env, argv[1], &string_format)) {
         return enif_make_badarg(env);
     }
-    if (!enif_get_int(env, argv[3], &end_as_more)) {
-        return enif_make_badarg(env);
-    }
-    if (enif_is_empty_list(env, argv[1])) {
-        if (ejs->buf == NULL)
-            return enif_make_tuple1(env, enif_make_int(env, 1));
-    } else {
-        if (!enif_is_binary(env, argv[1]) ||
-            !enif_inspect_binary(env, argv[1], &bin))
-        {
-            if (!enif_inspect_iolist_as_binary(env, argv[1], &bin)) {
-                return enif_make_badarg(env);
-            }
+    if (ejs->buf == NULL || ejs->ptr == (ejs->buf + ejs->buf_sz)) {
+        if (ejs->eof) {
+            return enif_make_copy(env, am_eof);
+        } else {
+            return enif_make_copy(env, am_more);
         }
+    }
+    uchar *stop = ejs->buf + ejs->buf_sz;
+    switch (json_token(ejs->ptr, stop, &ejs->jtok, &ejs->ptr)) {
+    case -1:
+        /* error */
+        return enif_make_tuple2(env, enif_make_copy(env, am_error),
+                                enif_make_int(env, -1));
+        break;
+    case 0:
+        /* more bytes */
+        goto return_more_or_end;
+        break;
+    case 1:
+    default:
+        return enif_make_tuple2(env, enif_make_copy(env, am_token),
+                                make_json_token(env, ejs, string_format));
+        break;
+    }
+    return_more_or_end:
+    if ((ejs->buf == NULL) || (ejs->ptr == stop)) {
+        /* end */
+        if (ejs->eof) {
+            return enif_make_copy(env, am_eof);
+        } else {
+            return enif_make_copy(env, am_more);
+        }
+    } else {
+        return enif_make_copy(env, am_more);
+    }
+}
 
+static ERL_NIF_TERM data(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    ejson_state_t *ejs = NULL;
+    ErlNifBinary bin;
+    if (!enif_get_resource(env, argv[0], ejson_state_type, (void **)&ejs)) {
+        return enif_make_badarg(env);
+    }
+    if (enif_is_atom(env, argv[1]) && (enif_compare(am_eof, argv[1]) == 0)) {
+        ejs->eof = 1;
+        return enif_make_copy(env, am_ok);
+    }
+    if (ejs->eof) {
+        return enif_make_tuple2(env, enif_make_copy(env, am_error),
+                                enif_make_copy(env, am_eof));
+    }
+    if ((enif_is_binary(env, argv[1]) &&
+         enif_inspect_binary(env, argv[1], &bin)) ||
+        enif_inspect_iolist_as_binary(env, argv[1], &bin)) {
         if (ejs->buf) {
             uchar *tmp = ejs->buf;
             size_t keep = ejs->buf_sz - (ejs->ptr - ejs->buf);
@@ -173,39 +214,9 @@ static ERL_NIF_TERM next_token(ErlNifEnv* env,
             memcpy(ejs->buf, bin.data, bin.size);
         }
         ejs->ptr = ejs->buf;
+        return enif_make_copy(env, am_ok);
     }
-    uchar *stop = ejs->buf + ejs->buf_sz;
-
-    if (ejs->ptr == stop) {
-        goto return_more_or_end;
-    }
-    switch (json_token(ejs->ptr, stop, &ejs->jtok, &ejs->ptr)) {
-    case -1:
-        /* error */
-        return enif_make_tuple2(env, enif_make_copy(env, am_error),
-                                enif_make_int(env, -1));
-        break;
-    case 0:
-        /* more bytes */
-        goto return_more_or_end;
-        break;
-    case 1:
-    default:
-        return enif_make_tuple2(env, enif_make_copy(env, am_token),
-                                make_json_token(env, ejs, string_as));
-        break;
-    }
-    return_more_or_end:
-    if ((ejs->buf == NULL) || (ejs->ptr == stop)) {
-        /* end */
-        if (end_as_more) {
-            return enif_make_copy(env, am_more);
-        } else {
-            return enif_make_copy(env, am_end);
-        }
-    } else {
-        return enif_make_copy(env, am_more);
-    }
+    return enif_make_badarg(env);
 }
 
 static ERL_NIF_TERM debug(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
@@ -262,19 +273,20 @@ static int atload(ErlNifEnv* env, void** priv_data, ERL_NIF_TERM load_info)
     am_json_token_null = enif_make_atom(env, "null");
     am_json_token_true = enif_make_atom(env, "true");
     am_more = enif_make_atom(env, "more");
-    am_end = enif_make_atom(env, "eof");
+    am_eof = enif_make_atom(env, "eof");
     am_token = enif_make_atom(env, "token");
     am_string = enif_make_atom(env, "string");
     am_number = enif_make_atom(env, "number");
     am_error = enif_make_atom(env, "error");
+    am_ok = enif_make_atom(env, "ok");
 
     return 0;
 }
 
 static ErlNifFunc nif_funcs[] = {
-    {"init", 1, init}
-    , {"next_token", 4, next_token}
-//    , {"data", 2, data}
+    {"new", 1, init}
+    , {"next_token", 2, next_token}
+    , {"data", 2, data}
 //    , {"get_position", 1, get_position}
 //    , {"get_remaining", 1, get_remaining}
     , {"debug", 1, debug}

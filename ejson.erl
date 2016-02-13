@@ -1,23 +1,83 @@
 -module(ejson).
 
--export([file/1, tokenize/1, xxx/1]).
--on_load(on_load/0).
+-export([new/1, data/2, next_token/2]).
 
+%% tests
+-export([debug/1]).
+-export([file/1, tokenize/1, xxx/1, xxxf/1]).
+
+-on_load(nif_load/0).
+
+%% ------------------------------------------------------------------------
+
+-opaque ejson_tokenizer() :: <<>>.
+-export_type([ejson_tokenizer/0]).
+
+-spec new(term()) -> ejson_tokenizer().
+new(_X) ->
+    nif_only().
+
+new(_X, String) ->
+    S = new(_X),
+    data(S, String),
+    data(S, eof),
+    S.
+
+-spec data(ejson_tokenizer(), iodata()|'eof') -> 'ok'.
+data(_, _Data) ->
+    nif_only().
+
+-type string_format() :: 0..255.
+-spec next_token(ejson_tokenizer(), string_format()) ->
+                        {'token', term()} | {'error', term()} | more | eof.
+next_token(_State, _StringFormat) ->
+    nif_only().
+
+
+
+debug(_x) ->
+    ok.
+
+%% ------------------------------------------------------------------------
 
 file(FName) ->
     BufSz = 16,
     case file:open(FName, [read,binary,raw]) of
         {ok, Fd} ->
             F = fun () -> file:read(Fd, BufSz) end,
-            ploop(init(42), F, [], F());
+            floop(new(42), F, []);
         _Err ->
             io:format("~p\n", [_Err]),
             _Err
     end.
 
+file_data(S, {ok, Buf}) ->
+    data(S, Buf);
+file_data(S, eof) ->
+    data(S, eof).
+
+floop(State, ReadF, Res) ->
+    case next_token(State, 2) of
+        more ->
+            _Debug = debug(State),
+%            io:format("Debug: ~p\n", [debug(State)]),
+            file_data(State, ReadF()),
+            floop(State, ReadF, Res);
+        eof ->
+            _Debug = debug(State),
+%            io:format("Debug: ~p\n", [debug(State)]),
+            lists:reverse(Res);
+        {token, Symbol} ->
+            io:format("Symbol: ~p\n", [Symbol]),
+            floop(State, ReadF, [Symbol|Res]);
+        {error, Error} ->
+            {error, Error, debug(State)}
+    end.
+
+
 tokenize(Buffer) ->
-    S = init(42),
-    tokenize(S, [], next_token(S, Buffer, 5, 0)).
+    S = new(42, Buffer),
+    tokenize(S, [], next_token(S, 5)).
 
 tokenize(_S, Tokens, eof) ->
     lists:reverse(Tokens);
@@ -26,12 +86,20 @@ tokenize(S, Tokens, more) ->
 tokenize(S, Tokens, {error, Err}) ->
     {error, lists:reverse(Tokens), debug(S), Err};
 tokenize(S, Tokens, Token) ->
-    tokenize(S, [Token|Tokens], next_token(S, [], 5, 0)).
+    tokenize(S, [Token|Tokens], next_token(S, 5)).
 
 
 xxx(Str) ->
-    S = init(42),
-    xxx_value(S, next_token(S, Str, 2, 0)).
+    S = new(42, Str),
+    xxx_value(S, next_token(S, 2)).
+
+xxxf(FileName) ->
+    BufSz = 16,
+    {ok, Fd} = file:open(FileName, [read,binary,raw]),
+    F = fun () -> file:read(Fd, BufSz) end,
+    S = new(42),
+    xxx_value({S, F}).
+
 
 xxx_value(S) ->
     xxx_value(S, xxx_next(S)).
@@ -90,43 +158,22 @@ xxx_array_next(S, Array) ->
             xxx_array_next(S, [Value|Array])
     end.
 
-xxx_next(S) ->
-    next_token(S, [], 2, 0).
-
-
-ploop(_State, _MoreBytesF, Res, eof) ->
-    Res;
-ploop(State, MoreBytesF, Res, {ok, Buf}) ->
-    case next_token(State, Buf, 2, 0) of
+xxx_next({S, ReadF}) ->
+    case next_token(S, 2) of
         more ->
-            _Debug = debug(State),
-%            io:format("Debug: ~p\n", [debug(State)]),
-            ploop(State, MoreBytesF, Res, MoreBytesF());
-        eof ->
-            _Debug = debug(State),
-%            io:format("Debug: ~p\n", [debug(State)]),
-            ploop(State, MoreBytesF, Res, MoreBytesF());
-        {token, Symbol} ->
-            io:format("Symbol: ~p\n", [Symbol]),
-            ploop(State, MoreBytesF, [Symbol|Res], {ok, []});
-        {error, Error} ->
-            {error, Error, debug(State)}
-    end.
-
-next_token(_State, _Buf) ->
-    next_token(_State, _Buf, 0, 0).
-
-%% -> more_bytes | symbol | error
-next_token(_State, _Buf, _StringAs, _MoreEnd) ->
-    ok.
-
-init(_X) ->
-    ok.
-
-debug(_x) ->
-    ok.
+            file_data(S, ReadF()),
+            xxx_next({S, ReadF});
+        Token ->
+            Token
+    end;
+xxx_next(S) ->
+    next_token(S, 2).
 
 
-on_load() ->
+%% ------------------------------------------------------------------------
+
+nif_load() ->
     erlang:load_nif("ejson_nif", 0).
 
+nif_only() ->
+    erlang:nif_error(not_loaded).
