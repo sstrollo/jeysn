@@ -116,8 +116,25 @@ int json_token(uchar *buf, uchar *stop, json_token_t *jtok, uchar **np)
         }
         break;
     default:
-        *np = p;
-        return -1;
+        if (((*p >= '0') && (*p <= '9')) || (*p == '-')) {
+            /* XXX proper number parser */
+            jtok->type = json_token_number;
+            jtok->value.number = 0;
+            for (;;) {
+                if (p == stop) return 0;
+                if (((*p >= '0') && (*p <= '9')) || (*p == '.')) {
+                    jtok->value.number = (10 * jtok->value.number) + (*p - '0');
+                    p++;
+                } else {
+                    break;
+                }
+            }
+            *np = p;
+            return 1;
+        } else {
+            *np = p;
+            return -1;
+        }
     }
     return -1;
 }

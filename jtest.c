@@ -62,6 +62,9 @@ int main(int argc, char *argv[])
             printf("TOKEN(%d) ", jtok.type);
             if (jtok.type == json_token_string) {
                 print_str(jtok.value.string.string, jtok.value.string.size);
+                if (jtok.value.string.need_free) {
+                    free(jtok.value.string.string);
+                }
             } else {
                 printf("\n");
             }

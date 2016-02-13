@@ -6,7 +6,7 @@ ERLC = $(PREFIX)/bin/erlc
 ERL_INCLUDE = $(wildcard $(PREFIX)/lib/erlang/erts-*/include)
 
 
-all: eparse_nif.so eparse.beam jtest
+all: eparse_nif.so eparse.beam jtest ejson_nif.so ejson.beam
 
 %.beam: %.erl
 	$(ERLC) $<
@@ -25,6 +25,9 @@ jtest.o: jtest.c
 
 jtest: jtest.o json.o
 	$(CC) -o $@ $^
+
+ejson_nif.so: ejson.o json.o
+	$(CC) -bundle -undefined dynamic_lookup -o $@ $^
 
 clean:
 	rm -f jtest *.beam *.o *.so
