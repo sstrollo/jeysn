@@ -130,7 +130,7 @@ static void destroy_state(ErlNifEnv *env, void *obj)
 {
     ejson_state_t *ejs = obj;
     if (ejs->buf) { enif_free(ejs->buf); }
-    enif_fprintf(stderr, "destroy_state(<%p>)\n", ejs);
+//    enif_fprintf(stderr, "destroy_state(<%p>)\n", ejs);
     return;
 }
 
@@ -241,7 +241,7 @@ static ERL_NIF_TERM init(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
     ep = enif_alloc_resource(ejson_state_type, sizeof(ejson_state_t));
     memset(ep, 0, sizeof(*ep));
     ep->string_format = 1;
-    enif_fprintf(stderr, "new_state(<%p>)\n", ep);
+//    enif_fprintf(stderr, "new_state(<%p>)\n", ep);
 
     /* transfer ownership to calling process */
     ret = enif_make_resource(env, ep);
@@ -284,7 +284,8 @@ static int atload(ErlNifEnv* env, void** priv_data, ERL_NIF_TERM load_info)
 }
 
 static ErlNifFunc nif_funcs[] = {
-    {"new", 1, init}
+    {"init", 0, init}
+    , {"init", 1, init}
     , {"next_token", 2, next_token}
     , {"data", 2, data}
 //    , {"get_position", 1, get_position}

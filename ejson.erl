@@ -1,6 +1,6 @@
 -module(ejson).
 
--export([new/1, data/2, next_token/2]).
+-export([init/0, init/1, init_string/1, init_string/2, data/2, next_token/2]).
 
 %% tests
 -export([debug/1]).
@@ -13,12 +13,19 @@
 -opaque ejson_tokenizer() :: <<>>.
 -export_type([ejson_tokenizer/0]).
 
--spec new(term()) -> ejson_tokenizer().
-new(_X) ->
+-spec init(term()) -> ejson_tokenizer().
+init(_X) ->
     nif_only().
 
-new(_X, String) ->
-    S = new(_X),
+-spec init() -> ejson_tokenizer().
+init() ->
+    init([]).
+
+init_string(String) ->
+    init_string([], String).
+
+init_string(Options, String) ->
+    S = init(Options),
     data(S, String),
     data(S, eof),
     S.
@@ -45,7 +52,7 @@ file(FName) ->
     case file:open(FName, [read,binary,raw]) of
         {ok, Fd} ->
             F = fun () -> file:read(Fd, BufSz) end,
-            floop(new(42), F, []);
+            floop(init(), F, []);
         _Err ->
             io:format("~p\n", [_Err]),
             _Err
@@ -67,16 +74,16 @@ floop(State, ReadF, Res) ->
             _Debug = debug(State),
 %            io:format("Debug: ~p\n", [debug(State)]),
             lists:reverse(Res);
-        {token, Symbol} ->
-            io:format("Symbol: ~p\n", [Symbol]),
-            floop(State, ReadF, [Symbol|Res]);
+        {token, Token} ->
+            io:format("Token: ~p\n", [Token]),
+            floop(State, ReadF, [Token|Res]);
         {error, Error} ->
             {error, Error, debug(State)}
     end.
 
 
 tokenize(Buffer) ->
-    S = new(42, Buffer),
+    S = init_string(Buffer),
     tokenize(S, [], next_token(S, 5)).
 
 tokenize(_S, Tokens, eof) ->
@@ -90,15 +97,14 @@ tokenize(S, Tokens, Token) ->
 
 
 xxx(Str) ->
-    S = new(42, Str),
+    S = init_string(Str),
     xxx_value(S, next_token(S, 2)).
 
 xxxf(FileName) ->
     BufSz = 16,
     {ok, Fd} = file:open(FileName, [read,binary,raw]),
     F = fun () -> file:read(Fd, BufSz) end,
-    S = new(42),
-    xxx_value({S, F}).
+    xxx_value({init(), F}).
 
 
 xxx_value(S) ->

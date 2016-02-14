@@ -19,6 +19,66 @@
 
 #include "json.h"
 
+
+void json_state_init(json_state_t *jsp, void *(*alloc)(size_t size),
+                     void (*free)(void *ptr))
+{
+    memset(jsp, 0, sizeof(*jsp));
+    jsp->alloc = alloc;
+    jsp->free = free;
+    return;
+}
+
+void json_state_destroy(json_state_t *jsp)
+{
+    if (jsp->buf.buf) {
+        jsp->free((void *)jsp->buf.buf);
+    }
+    memset(jsp, 0, sizeof(*jsp));
+    return;
+}
+
+void json_state_add_buffer(json_state_t *jsp, void *p, size_t sz)
+{
+    if (jsp->buf.buf == NULL) {
+        jsp->buf.buf = jsp->buf.ptr = jsp->alloc(sz);
+        jsp->buf.size = sz;
+        jsp->buf.stop = jsp->buf.buf + sz;
+        memcpy(jsp->buf.buf, p, sz);
+        return;
+    }
+    size_t keep = jsp->buf.stop - jsp->buf.ptr;
+    if ((keep + sz) <= jsp->buf.size)
+    {
+        /* re-use current buffer */
+#if 0
+        fprintf(stderr,
+                "re-using buf: currsz=%ld keep=%ld need=%ld ptrpos=%ld\n",
+                jsp->buf.size, keep, sz, jsp->buf.ptr - jsp->buf.buf);
+#endif
+        memmove(jsp->buf.buf, jsp->buf.ptr, keep);
+        jsp->buf.ptr = jsp->buf.buf;
+        memcpy(jsp->buf.buf + keep, p, sz);
+        jsp->buf.stop = jsp->buf.buf + keep + sz;
+    } else {
+        uchar *tmp = jsp->buf.buf;
+        jsp->buf.size = keep + sz;
+        jsp->buf.buf = jsp->alloc(jsp->buf.size); /* realloc() */
+        if (keep > 0) memcpy(jsp->buf.buf, jsp->buf.ptr, keep);
+        jsp->buf.ptr = jsp->buf.buf;
+        memcpy(jsp->buf.buf + keep, p, sz);
+        jsp->buf.stop = jsp->buf.buf + jsp->buf.size;
+        jsp->free(tmp);
+    }
+#if 0
+    fprintf(stderr, "buf: keep=%ld sz=%ld size=%ld stop=%ld |%.*s|\n",
+            keep, sz, jsp->buf.size, (jsp->buf.stop - jsp->buf.buf),
+            (int)(jsp->buf.stop - jsp->buf.buf), jsp->buf.buf);
+#endif
+    return;
+}
+
+
 #define is_json_ws(C) (((C) == 0x20) || ((C) == 0x09) || \
                        ((C) == 0x0a) || ((C) == 0x0d))
 
@@ -35,6 +95,19 @@
 #define json_char_reverse_solidus (0x5c)
 
 
+
+json_result_t json_next_token(json_state_t *jsp)
+{
+    if (json_state_at_eob(jsp)) {
+        if (jsp->eof) {
+            return json_result_eof;
+        } else {
+            return json_result_more;
+        }
+    }
+    return
+        json_token(jsp->buf.ptr, jsp->buf.stop, &jsp->token, &jsp->buf.ptr);
+}
 
 int json_token(uchar *buf, uchar *stop, json_token_t *jtok, uchar **np)
 {
@@ -140,19 +213,6 @@ int json_token(uchar *buf, uchar *stop, json_token_t *jtok, uchar **np)
 }
 
 
-/*
-
-    looking for: value
-      ws  -> looking for value
-      'f' -> looking for false
-      'n' -> looking for null
-      't' -> looking for true
-      begin-object -> looking for object
-      begin-array  -> looking for array
-      number
-      string
-
- */
 
 /*
       char = unescaped /
