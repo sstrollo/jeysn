@@ -100,6 +100,7 @@ static ERL_NIF_TERM make_json_token(ErlNifEnv *env, ejson_state_t *ejs,
     {
         const char *str = (const char *)ejs->js.token.value.string.string;
         size_t strsz = ejs->js.token.value.string.size;
+//        enif_fprintf(stderr, "NUMBER |%*.s|\n", (int)strsz, str);
         return enif_make_tuple2(env,
                                 enif_make_copy(env, am_number),
                                 enif_make_string_len(env, str, strsz,

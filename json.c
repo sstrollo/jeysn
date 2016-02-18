@@ -16,6 +16,7 @@
 #include <stdint.h>
 
 #include <stdlib.h>
+//#include <errno.h>
 
 #include "json.h"
 
@@ -38,6 +39,18 @@ static void nl(json_state_t *jsp)
     jsp->pos.pos += 1;
     jsp->pos.line += 1;
     jsp->pos.col = 0;
+}
+
+static json_result_t json_result_error_on_eof(json_state_t *jsp)
+{
+    if (jsp->eof) {
+        jsp->token.type = json_token_error;
+        jsp->token.value.error.code = json_error_eof;
+        jsp->token.value.error.string = "premature end while scanning token";
+        return json_result_error;
+    } else {
+        return json_result_more;
+    }
 }
 
 void json_state_init(json_state_t *jsp, void *(*alloc)(size_t size),
@@ -243,7 +256,7 @@ int json_string(uchar *buf, uchar *stop,
         *np = p + 1;
         return 1;
     } else {
-        uchar *src = start, *dst, *tmp = malloc(sz);
+        uchar *src = start, *dst, *tmp = malloc(sz); /* XXX */
         for (dst = tmp; src < p;) {
             if (*src == json_char_reverse_solidus) {
                 src++;
@@ -312,32 +325,106 @@ int json_string(uchar *buf, uchar *stop,
       zero = %x30                ; 0
 */
 
-#if 0
 /* Assumption: ptr is pointing to start of number  */
-static int json_number(json_state_t *jsp)
+static json_result_t json_number(json_state_t *jsp)
 {
+    json_token_t *jtok = &jsp->token;
     int is_neg = 0;
-    int has_frac = 0;
-    int has_exp = 0;
-    size_t len = 1;
     uint64_t un;
     int64_t  in;
-    double d;
     uchar *start, *p = jsp->buf.ptr;
     uchar *stop = jsp->buf.stop;
     start = p;
-    if (*p == '-') { is_neg=1; p++; }
-    /* first scan for frac and exp */
-    for (;;) {
+    if (*p == '-') {
+        is_neg=1;
+        p++;
+        if (p == stop) {
+            return json_result_error_on_eof(jsp);
+        }
+    }
+    for (un = 0;;) {
+        if (p == stop){if (jsp->eof) break; else return json_result_more;}
+        if ((*p >= '0') && (*p <= '9')) {
+            uint64_t tmp = 10 * un;
+            if (tmp < un)
+                goto rescan;
+            un = tmp + (*p - '0');
+            p++;
+        } else {
+            if (*p == '.') {
+                goto rescan;
+            } else {
+                break;
+            }
+        }
+    }
+    if (is_neg) {
+        in = un;
+        if (in != un) {
+            goto rescan;
+        }
+        in = 0 - in;
+        jtok->type = json_token_number;
+        jtok->value.number = in;
+    } else {
+        jtok->type = json_token_number_unsigned;
+        jtok->value.number_unsigned = un;
+    }
+    update_position(jsp, p);
+    return json_result_token;
 
+rescan:
+    /* Continue scanning until end of number. If it seems like a
+     * floating point try strtod() otherwise return it as string.
+     */
+    {
+        int is_float = 0;
+        for (;;) {
+            if (p == stop){if (jsp->eof) break; else return json_result_more;}
+            if ((*p >= '0') && (*p <= '9')) {
+                p++;
+            } else {
+                if (is_float) {
+                    if ((*p == 'e') || (*p == 'E') ||
+                        (*p == '-') || (*p == '+')) {
+                        p++;    /* XXX close enough... */
+                    } else {
+                        break;
+                    }
+                } else {
+                    if (*p == '.') {
+                        is_float = 1;
+                        p++;
+                    } else {
+                        break;
+                    }
+                }
+            }
+        }
+        if (is_float) {
+            double d = 0.0;
+            size_t len = (p - start) + 1;
+            char tmp[len];
+            char *tmp_end;
+            memcpy(tmp, start, len-1);
+            tmp[len-1] = 0;
+            d = strtod(tmp, &tmp_end);
+//            if (tmp_end == (tmp + (len - 1)) && (errno != ERANGE)) {
+                jtok->type = json_token_number_double;
+                jtok->value.number_double = d;
+                update_position(jsp, p);
+                return json_result_token;
+//            }
+        }
+        jtok->type = json_token_number_string;
+        jtok->value.string.string = start;
+        jtok->value.string.size = p - start;
+        jtok->value.string.need_free = 0;
+        update_position(jsp, p);
+        return json_result_token;
     }
 }
 
-int json_number(uchar *buf, uchar *stop)
-{
-    return 42;
-}
-#endif
 
 json_result_t json_next_token(json_state_t *jsp)
 {
@@ -443,27 +530,8 @@ json_result_t json_next_token(json_state_t *jsp)
         break;
     default:
         if (((*p >= '0') && (*p <= '9')) || (*p == '-')) {
-            /* XXX proper number parser */
-            jtok->type = json_token_number;
-            jtok->value.number = 0;
-            for (;;) {
-                if (p == stop) {
-                    if (jsp->eof) {
-                        update_position(jsp, p);
-                        return json_result_token;
-                    } else {
-                        return json_result_more;
-                    }
-                }
-                if (((*p >= '0') && (*p <= '9')) || (*p == '.')) {
-                    jtok->value.number = (10 * jtok->value.number) + (*p - '0');
-                    p++;
-                } else {
-                    break;
-                }
-            }
             update_position(jsp, p);
-            return json_result_token;
+            return json_number(jsp);
         } else {
             update_position(jsp, p);
             /* FIXME set error token */
@@ -471,13 +539,5 @@ json_result_t json_next_token(json_state_t *jsp)
         }
     }
 need_more:
-    if (jsp->eof) {
-        jsp->token.type = json_token_error;
-        jsp->token.value.error.code = json_error_eof;
-        jsp->token.value.error.string = "premature end while scanning token";
-    } else {
-        return json_result_more;
-    }
-    /* NOT REACHED */
-    return json_result_error;
+    return json_result_error_on_eof(jsp);
 }

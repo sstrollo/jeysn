@@ -3,7 +3,7 @@
 -include_lib("proper/include/proper.hrl").
 
 test() ->
-    case proper:module(?MODULE, [{numtests,1000}]) of
+    case proper:module(?MODULE, [{numtests,2000}]) of
         [] ->
             erlang:halt(0);
         Res ->
@@ -18,7 +18,7 @@ s() ->
                       json_string() | json_array() | json_object().
 
 %-type json_number() :: integer().
--type json_number() :: 0..100000.
+-type json_number() :: number().
 
 -type json_string() :: json_string_chars().
 -type json_string_chars() :: [json_string_char(),...].
@@ -30,6 +30,34 @@ s() ->
 -type json_object_member() :: {json_string(), json_value()}.
 
 
+prop_number() ->
+    ?FORALL(Ns, list(json_number()),
+            begin
+                T = ejson:init_string([[number_to_string(N),$ ]||N <- Ns]),
+                same_numbers(T, Ns)
+            end).
+
+number_to_string(N) when is_integer(N) -> integer_to_list(N);
+number_to_string(N) when is_float(N) -> float_to_list(N).
+
+same_numbers(T, []) ->
+    eof == ejson:next_token(T);
+same_numbers(T, [N|Ns]) ->
+    case same_number(N, ejson:next_token(T)) of
+        true ->
+            same_numbers(T, Ns);
+        false ->
+            false
+    end.
+
+same_number(N, {token, T}) -> same_number(N, T);
+same_number(N, {number, N}) -> true;
+same_number(N, N) -> true;
+same_number(N, {number, Str}) when is_list(Str) ->
+    N == list_to_integer(Str);
+same_number(N1, N2) ->
+    io:format("~p != ~p\n", [N1, N2]),
+    false.
 
 %%-type json_ws_char() :: 16#20 | 16#09 | 16#0a | 16#0d.
 %%-type json_ws()      :: [json_ws_char()].
@@ -60,8 +88,8 @@ test_str() ->
 prop_test() ->
     ?FORALL(Str, test_str(),
             begin
-                Term = ejson:xxx(Str),
-%%                io:format("\n\nStr: ~s\nTerm: ~9999p\n\n", [Str, Term]),
+                _Term = ejson:xxx(Str),
+%%                io:format("\n\nStr: ~s\nTerm: ~9999p\n\n", [Str, _Term]),
                 true
             end).
 
