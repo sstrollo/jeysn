@@ -25,20 +25,41 @@ static ERL_NIF_TERM am_ok;
 
 
 typedef struct ejson_state {
-    int string_format;     /* 1 binary, 2 string, 3 atom, 4 existing atom */
-    int eof;
-    unsigned int lineno;
-    uchar *buf;
-    uchar *ptr;
-    size_t buf_sz;
-    json_token_t jtok;
+    int string_format;     /* 0 binary, 1 string, 2 atom, 3 existing atom */
+    int string_split;      /* -1 or 0..127 */
+    json_state_t js;
 } ejson_state_t;
 
-static ERL_NIF_TERM make_json_token(ErlNifEnv *env, ejson_state_t *ejs,
-                                    int string_format)
+static inline ERL_NIF_TERM make_json_string(ErlNifEnv *env, int sfmt,
+                                            const char *str, size_t strsz)
 {
-    int sfmt = (string_format == 0) ? ejs->string_format : string_format;
-    switch (ejs->jtok.type) {
+    ERL_NIF_TERM term;
+    switch (sfmt) {
+    case 1:
+        term = enif_make_string_len(env, str, strsz, ERL_NIF_LATIN1);
+        break;
+    case 2:
+        term = enif_make_atom_len(env, str, strsz);
+        break;
+    case 3:
+        if (enif_make_existing_atom_len(env, str, strsz, &term, ERL_NIF_LATIN1))
+            break;
+        /* fall-through to binary */
+    default:
+        memcpy(enif_make_new_binary(env, strsz, &term), str, strsz);
+    }
+    return term;
+}
+
+static ERL_NIF_TERM make_json_token(ErlNifEnv *env, ejson_state_t *ejs,
+                                    int string_format, int string_split)
+{
+    int sfmt = (string_format == -1) ? ejs->string_format : string_format;
+    int splitc = (string_split == -2) ? ejs->string_split : string_split;
+    switch (ejs->js.token.type) {
+    case json_token_error:
+        /* XXX */
+        return enif_make_copy(env, am_error);
     case json_token_begin_array:
         return enif_make_copy(env, am_json_token_begin_array);
         break;
@@ -67,119 +88,137 @@ static ERL_NIF_TERM make_json_token(ErlNifEnv *env, ejson_state_t *ejs,
         return enif_make_copy(env, am_json_token_true);
         break;
     case json_token_number:
-        return enif_make_int64(env, ejs->jtok.value.number);
+        return enif_make_int64(env, ejs->js.token.value.number);
         break;
     case json_token_number_unsigned:
-        return enif_make_uint64(env, ejs->jtok.value.number_unsigned);
+        return enif_make_uint64(env, ejs->js.token.value.number_unsigned);
         break;
     case json_token_number_double:
-        return enif_make_double(env, ejs->jtok.value.number_double);
+        return enif_make_double(env, ejs->js.token.value.number_double);
         break;
+    case json_token_number_string:
+    {
+        const char *str = (const char *)ejs->js.token.value.string.string;
+        size_t strsz = ejs->js.token.value.string.size;
+        return enif_make_tuple2(env,
+                                enif_make_copy(env, am_number),
+                                enif_make_string_len(env, str, strsz,
+                                                     ERL_NIF_LATIN1));
+    }
     case json_token_string:
     {
         ERL_NIF_TERM string;
-        uchar *str = ejs->jtok.value.string.string;
-        size_t strsz = ejs->jtok.value.string.size;
-        switch (sfmt) {
-        case 2:
-            string = enif_make_string_len(env, (const char *)str, strsz,
-                                          ERL_NIF_LATIN1);
-            break;
-        case 3:
-            string = enif_make_atom_len(env, (const char *)str, strsz);
-            break;
-        case 4:
-            /* XXX existing atom */
-            string = enif_make_atom_len(env, (const char *)str, strsz);
-            break;
-        case 5:
-        case 6:
-        case 7:
-        {
-            /* split */
-            uchar *split = memchr(str, ':', strsz);
-            if (split) {
-                ERL_NIF_TERM hd, tl;
-                /* XXX */
-                hd = enif_make_atom_len(env, (const char *)str, split - str);
-                split++;
-                tl = enif_make_atom_len(env, (const char *)split,
-                                        (str + strsz) - split);
-                string = enif_make_list_cell(env, hd, tl);
-            } else {
-                string = enif_make_atom_len(env, (const char *)str, strsz);
-            }
-            break;
+        uchar *splitp;
+        uchar *str = ejs->js.token.value.string.string;
+        size_t strsz = ejs->js.token.value.string.size;
+        if (splitc < 0 || (splitp = memchr(str, splitc, strsz)) == NULL) {
+            string = make_json_string(env, sfmt, (const char *)str, strsz);
+        } else {
+            ERL_NIF_TERM hd, tl;
+            hd = make_json_string(env, sfmt, (const char *)str, splitp - str);
+            splitp++;
+            tl = make_json_string(env, sfmt, (const char *)splitp,
+                                  (str + strsz) - splitp);
+            string = enif_make_list_cell(env, hd, tl);
         }
-        default:
-            memcpy(enif_make_new_binary(env, strsz, &string), str, strsz);
-        }
-        if (ejs->jtok.value.string.need_free) {
-            enif_free(ejs->jtok.value.string.string);
+        if (ejs->js.token.value.string.need_free) {
+            enif_free(ejs->js.token.value.string.string);
         }
         return enif_make_tuple2(env, enif_make_copy(env, am_string), string);
-        break;
     }
     }
 }
 
+static ERL_NIF_TERM make_position(ErlNifEnv* env, ejson_state_t *ejs)
+{
+    ERL_NIF_TERM buf1, buf2;
+    if (ejs->js.buf.buf) {
+        size_t sz1 = ejs->js.buf.ptr - ejs->js.buf.buf;
+        memcpy(enif_make_new_binary(env, sz1, &buf1), ejs->js.buf.buf, sz1);
+        size_t sz2 = ejs->js.buf.stop - ejs->js.buf.ptr;
+        memcpy(enif_make_new_binary(env, sz2, &buf2), ejs->js.buf.ptr, sz2);
+    } else {
+        enif_make_new_binary(env, 0, &buf1);
+        enif_make_new_binary(env, 0, &buf2);
+    }
+    ERL_NIF_TERM pos =
+        enif_make_tuple3(env, enif_make_uint(env, ejs->js.pos.pos),
+                         enif_make_uint(env, ejs->js.pos.line),
+                         enif_make_uint(env, ejs->js.pos.col));
+    return enif_make_tuple3(env, pos, buf1, buf2);
+}
 
 static ErlNifResourceType *ejson_state_type = NULL;
 
 static void destroy_state(ErlNifEnv *env, void *obj)
 {
     ejson_state_t *ejs = obj;
-    if (ejs->buf) { enif_free(ejs->buf); }
+    json_state_destroy(&ejs->js);
 //    enif_fprintf(stderr, "destroy_state(<%p>)\n", ejs);
     return;
+}
+
+static int get_string_format_arg(ErlNifEnv* env, ERL_NIF_TERM arg,
+                                 int *string_format, int *string_split)
+{
+    const ERL_NIF_TERM *tup;
+    ERL_NIF_TERM format;
+    int arity = 0, tmp;
+    if (enif_get_tuple(env, arg, &arity, &tup) && (arity == 2)) {
+        format = tup[0];
+        if (enif_get_int(env, tup[1], &tmp) && (tmp >= 0) && (tmp <= 127)) {
+            *string_split = tmp;
+        } else {
+            return 0;
+        }
+    } else {
+        format = arg;
+    }
+    if (enif_get_int(env, format, &tmp) && (tmp >= 0) && (tmp <= 3)) {
+        *string_format = tmp;
+        return 1;
+    }
+    return 0;
 }
 
 static ERL_NIF_TERM next_token(ErlNifEnv* env,
                                int argc, const ERL_NIF_TERM argv[])
 {
     ejson_state_t *ejs = NULL;
-    int string_format = 0;
+    int string_format = -1, string_split = -2;
     if (!enif_get_resource(env, argv[0], ejson_state_type, (void **)&ejs)) {
         return enif_make_badarg(env);
     }
-    if (!enif_get_int(env, argv[1], &string_format)) {
+    if ((argc == 2) &&
+        !get_string_format_arg(env, argv[1], &string_format, &string_split)) {
         return enif_make_badarg(env);
     }
-    if (ejs->buf == NULL || ejs->ptr == (ejs->buf + ejs->buf_sz)) {
-        if (ejs->eof) {
-            return enif_make_copy(env, am_eof);
+    switch (json_next_token(&ejs->js)) {
+    case json_result_more:
+        return enif_make_copy(env, am_more);
+    case json_result_eof:
+        return enif_make_copy(env, am_eof);
+    case json_result_token:
+    {
+        ERL_NIF_TERM token =
+            make_json_token(env, ejs, string_format, string_split);
+        if (ejs->js.token.type == json_token_error) {
+            return enif_make_tuple3(env,
+                                    enif_make_copy(env, am_error),
+                                    token,
+                                    make_position(env, ejs));
         } else {
-            return enif_make_copy(env, am_more);
+            return enif_make_tuple2(env,
+                                    enif_make_copy(env, am_token),
+                                    token);
         }
     }
-    uchar *stop = ejs->buf + ejs->buf_sz;
-    switch (json_token(ejs->ptr, stop, &ejs->jtok, &ejs->ptr)) {
-    case -1:
-        /* error */
+    case json_result_error:
         return enif_make_tuple2(env, enif_make_copy(env, am_error),
                                 enif_make_int(env, -1));
-        break;
-    case 0:
-        /* more bytes */
-        goto return_more_or_end;
-        break;
-    case 1:
-    default:
-        return enif_make_tuple2(env, enif_make_copy(env, am_token),
-                                make_json_token(env, ejs, string_format));
-        break;
     }
-    return_more_or_end:
-    if ((ejs->buf == NULL) || (ejs->ptr == stop)) {
-        /* end */
-        if (ejs->eof) {
-            return enif_make_copy(env, am_eof);
-        } else {
-            return enif_make_copy(env, am_more);
-        }
-    } else {
-        return enif_make_copy(env, am_more);
-    }
+    /* NOT REACHED */
+    return enif_make_badarg(env);
 }
 
 static ERL_NIF_TERM data(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
@@ -190,33 +229,31 @@ static ERL_NIF_TERM data(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
         return enif_make_badarg(env);
     }
     if (enif_is_atom(env, argv[1]) && (enif_compare(am_eof, argv[1]) == 0)) {
-        ejs->eof = 1;
+        json_state_set_eof(&ejs->js);
         return enif_make_copy(env, am_ok);
     }
-    if (ejs->eof) {
+    if (ejs->js.eof) {
         return enif_make_tuple2(env, enif_make_copy(env, am_error),
                                 enif_make_copy(env, am_eof));
     }
     if ((enif_is_binary(env, argv[1]) &&
          enif_inspect_binary(env, argv[1], &bin)) ||
-        enif_inspect_iolist_as_binary(env, argv[1], &bin)) {
-        if (ejs->buf) {
-            uchar *tmp = ejs->buf;
-            size_t keep = ejs->buf_sz - (ejs->ptr - ejs->buf);
-            ejs->buf_sz = keep + bin.size;
-            ejs->buf = enif_alloc(ejs->buf_sz);
-            memcpy(ejs->buf, ejs->ptr, keep);
-            memcpy(ejs->buf + keep, bin.data, bin.size);
-            enif_free(tmp);
-        } else {
-            ejs->buf_sz = bin.size;
-            ejs->buf = enif_alloc(ejs->buf_sz);
-            memcpy(ejs->buf, bin.data, bin.size);
-        }
-        ejs->ptr = ejs->buf;
+        enif_inspect_iolist_as_binary(env, argv[1], &bin))
+    {
+        json_state_add_buffer(&ejs->js, bin.data, bin.size);
         return enif_make_copy(env, am_ok);
     }
     return enif_make_badarg(env);
+}
+
+static ERL_NIF_TERM
+get_position(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    ejson_state_t *ejs = NULL;
+    if (!enif_get_resource(env, argv[0], ejson_state_type, (void **)&ejs)) {
+        return enif_make_badarg(env);
+    }
+    return make_position(env, ejs);
 }
 
 static ERL_NIF_TERM debug(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
@@ -226,26 +263,56 @@ static ERL_NIF_TERM debug(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
     if (!enif_get_resource(env, argv[0], ejson_state_type, (void **)&ejs)) {
         return enif_make_badarg(env);
     }
-    memcpy(enif_make_new_binary(env, ejs->buf_sz, &buf1),
-           ejs->buf, ejs->buf_sz);
-    size_t sz2 = ejs->buf_sz - (ejs->ptr - ejs->buf);
-    memcpy(enif_make_new_binary(env, sz2, &buf2), ejs->ptr, sz2);
-    return enif_make_tuple3(env, enif_make_uint(env, ejs->lineno), buf1, buf2);
+    if (ejs->js.buf.buf) {
+        size_t sz1 = ejs->js.buf.stop - ejs->js.buf.buf;
+        memcpy(enif_make_new_binary(env, sz1, &buf1), ejs->js.buf.buf, sz1);
+        size_t sz2 = ejs->js.buf.stop - ejs->js.buf.ptr;
+        memcpy(enif_make_new_binary(env, sz2, &buf2), ejs->js.buf.ptr, sz2);
+    } else {
+        buf1 = enif_make_list(env, 0);
+        buf2 = enif_make_list(env, 0);
+    }
+    ERL_NIF_TERM pos =
+        enif_make_tuple3(env, enif_make_uint(env, ejs->js.pos.pos),
+                         enif_make_uint(env, ejs->js.pos.line),
+                         enif_make_uint(env, ejs->js.pos.col));
+    return enif_make_tuple3(env, pos, buf1, buf2);
 }
 
 static ERL_NIF_TERM init(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
     ERL_NIF_TERM ret;
-    ejson_state_t *ep;
+    ejson_state_t *ejs;
 
-    ep = enif_alloc_resource(ejson_state_type, sizeof(ejson_state_t));
-    memset(ep, 0, sizeof(*ep));
-    ep->string_format = 1;
-//    enif_fprintf(stderr, "new_state(<%p>)\n", ep);
+    ejs = enif_alloc_resource(ejson_state_type, sizeof(ejson_state_t));
+    memset(ejs, 0, sizeof(*ejs));
+    json_state_init(&ejs->js, enif_alloc, enif_free);
+    ejs->string_format = 0;
+    ejs->string_split = -1;
+
+    if ((argc > 0) &&
+        enif_is_list(env, argv[0]) && !enif_is_empty_list(env, argv[0]))
+    {
+        ERL_NIF_TERM hd, tl = argv[0];
+        do {
+            const ERL_NIF_TERM *tup;
+            int arity = 0;
+            enif_get_list_cell(env, tl, &hd, &tl);
+            if (enif_get_tuple(env, hd, &arity, &tup) && (arity == 2)) {
+                if (enif_compare(am_string, tup[0]) == 0) {
+                    get_string_format_arg(env, tup[1],
+                                          &ejs->string_format,
+                                          &ejs->string_split);
+                }
+            }
+        } while (enif_is_list(env, tl) && !enif_is_empty_list(env, tl));
+    }
+
+//    enif_fprintf(stderr, "new_state(<%p>)\n", ejs);
 
     /* transfer ownership to calling process */
-    ret = enif_make_resource(env, ep);
-    enif_release_resource(ep);
+    ret = enif_make_resource(env, ejs);
+    enif_release_resource(ejs);
 
     return ret;
 }
@@ -285,11 +352,11 @@ static int atload(ErlNifEnv* env, void** priv_data, ERL_NIF_TERM load_info)
 
 static ErlNifFunc nif_funcs[] = {
     {"init", 0, init}
-    , {"init", 1, init}
-    , {"next_token", 2, next_token}
+    , {"init_nif", 1, init}
+    , {"next_token_nif", 1, next_token}
+    , {"next_token_nif", 2, next_token}
     , {"data", 2, data}
-//    , {"get_position", 1, get_position}
-//    , {"get_remaining", 1, get_remaining}
+    , {"get_position", 1, get_position}
     , {"debug", 1, debug}
 };
 

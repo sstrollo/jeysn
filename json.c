@@ -19,6 +19,26 @@
 
 #include "json.h"
 
+#define json_state_at_eob(JSP) (((JSP)->buf.buf == NULL) || \
+                                ((JSP)->buf.ptr == \
+                                 ((JSP)->buf.buf + (JSP)->buf.size)))
+#define json_state_at_eof(JSP) ((JSP)->eof && json_state_at_eob(JSP))
+
+
+static void update_position(json_state_t *jsp, uchar *newpos)
+{
+    size_t count = newpos - jsp->buf.ptr;
+    jsp->pos.pos += count;
+    jsp->pos.col += count;
+    jsp->buf.ptr = newpos;
+}
+
+static void nl(json_state_t *jsp)
+{
+    jsp->pos.pos += 1;
+    jsp->pos.line += 1;
+    jsp->pos.col = 0;
+}
 
 void json_state_init(json_state_t *jsp, void *(*alloc)(size_t size),
                      void (*free)(void *ptr))
@@ -35,6 +55,12 @@ void json_state_destroy(json_state_t *jsp)
         jsp->free((void *)jsp->buf.buf);
     }
     memset(jsp, 0, sizeof(*jsp));
+    return;
+}
+
+void json_state_set_eof(json_state_t *jsp)
+{
+    jsp->eof = 1;
     return;
 }
 
@@ -96,123 +122,6 @@ void json_state_add_buffer(json_state_t *jsp, void *p, size_t sz)
 
 
 
-json_result_t json_next_token(json_state_t *jsp)
-{
-    if (json_state_at_eob(jsp)) {
-        if (jsp->eof) {
-            return json_result_eof;
-        } else {
-            return json_result_more;
-        }
-    }
-    return
-        json_token(jsp->buf.ptr, jsp->buf.stop, &jsp->token, &jsp->buf.ptr);
-}
-
-int json_token(uchar *buf, uchar *stop, json_token_t *jtok, uchar **np)
-{
-    uchar *p;
-    for (p=buf; (p < stop) && is_json_ws(*p); p++) ;
-    if (p == stop) { *np = p; return 0; }
-    switch (*p) {
-    case json_char_begin_array:
-        jtok->type = json_token_begin_array;
-        *np = ++p;
-        return 1;
-        break;
-    case json_char_end_array:
-        jtok->type = json_token_end_array;
-        *np = ++p;
-        return 1;
-        break;
-    case json_char_begin_object:
-        jtok->type = json_token_begin_object;
-        *np = ++p;
-        return 1;
-        break;
-    case json_char_end_object:
-        jtok->type = json_token_end_object;
-        *np = ++p;
-        return 1;
-        break;
-    case json_char_name_separator:
-        jtok->type = json_token_name_separator;
-        *np = ++p;
-        return 1;
-        break;
-    case json_char_value_separator:
-        jtok->type = json_token_value_separator;
-        *np = ++p;
-        return 1;
-        break;
-    case 'f':
-        if ((p+4) >= stop) { *np = p; return 0; }
-        if ((*(p+1) == 'a') && (*(p+2) == 'l') &&
-            (*(p+3) == 's') && (*(p+4) == 'e')) {
-            jtok->type = json_token_false;
-            *np = p+5;
-            return 1;
-        }
-        break;
-    case 'n':
-        if ((p+3) >= stop) { *np = p; return 0; }
-        if ((*(p+1) == 'u') && (*(p+2) == 'l') && (*(p+3) == 'l')) {
-            jtok->type = json_token_null;
-            *np = p+4;
-            return 1;
-        }
-        break;
-    case 't':
-        if ((p+3) >= stop) { *np = p; return 0; }
-        if ((*(p+1) == 'r') && (*(p+2) == 'u') && (*(p+3) == 'e')) {
-            jtok->type = json_token_true;
-            *np = p+4;
-            return 1;
-        }
-        break;
-
-    case json_char_quotation_mark:
-        switch (json_string(p, stop, &jtok->value.string.string,
-                            &jtok->value.string.size, np))
-        {
-        case 0:
-            *np = p;
-            return 0;
-        case 1:
-            jtok->value.string.need_free = 0;
-            jtok->type = json_token_string;
-            return 1;
-        case 2:
-            jtok->value.string.need_free = 1;
-            jtok->type = json_token_string;
-            return 1;
-        }
-        break;
-    default:
-        if (((*p >= '0') && (*p <= '9')) || (*p == '-')) {
-            /* XXX proper number parser */
-            jtok->type = json_token_number;
-            jtok->value.number = 0;
-            for (;;) {
-                if (p == stop) return 0;
-                if (((*p >= '0') && (*p <= '9')) || (*p == '.')) {
-                    jtok->value.number = (10 * jtok->value.number) + (*p - '0');
-                    p++;
-                } else {
-                    break;
-                }
-            }
-            *np = p;
-            return 1;
-        } else {
-            *np = p;
-            return -1;
-        }
-    }
-    return -1;
-}
-
-
 
 /*
       char = unescaped /
@@ -248,11 +157,6 @@ static inline uchar get_hex_byte(uchar *s)
     res += HEXCHAR(*ptr);
     return res;
 #undef HEXCHAR
-}
-
-int json_number(uchar *buf, uchar *stop)
-{
-    return 42;
 }
 
 #define is_hex_char(C) ((((C) >= '0') && ((C) <= '9')) || \
@@ -385,3 +289,195 @@ int json_string(uchar *buf, uchar *stop,
     }
 }
 
+
+/*
+      number = [ minus ] int [ frac ] [ exp ]
+
+      decimal-point = %x2E       ; .
+
+      digit1-9 = %x31-39         ; 1-9
+
+      e = %x65 / %x45            ; e E
+
+      exp = e [ minus / plus ] 1*DIGIT
+
+      frac = decimal-point 1*DIGIT
+
+      int = zero / ( digit1-9 *DIGIT )
+
+      minus = %x2D               ; -
+
+      plus = %x2B                ; +
+
+      zero = %x30                ; 0
+*/
+
+#if 0
+/* Assumption: ptr is pointing to start of number  */
+static int json_number(json_state_t *jsp)
+{
+    int is_neg = 0;
+    int has_frac = 0;
+    int has_exp = 0;
+    size_t len = 1;
+    uint64_t un;
+    int64_t  in;
+    double d;
+    uchar *start, *p = jsp->buf.ptr;
+    uchar *stop = jsp->buf.stop;
+    start = p;
+    if (*p == '-') { is_neg=1; p++; }
+    /* first scan for frac and exp */
+    for (;;) {
+
+    }
+}
+
+int json_number(uchar *buf, uchar *stop)
+{
+    return 42;
+}
+#endif
+
+json_result_t json_next_token(json_state_t *jsp)
+{
+    uchar *p = jsp->buf.ptr;
+    uchar *stop = jsp->buf.stop;
+    json_token_t *jtok = &jsp->token;
+
+    for (p=jsp->buf.ptr; p && (p < stop) && is_json_ws(*p); p++) {
+        if (*p == 0x0a) nl(jsp);
+    }
+    if (p == NULL || p == stop) {
+        if (p) update_position(jsp, p);
+        if (jsp->eof) {
+            return json_result_eof;
+        } else {
+            return json_result_more;
+        }
+    }
+    switch (*p) {
+    case json_char_begin_array:
+        jtok->type = json_token_begin_array;
+        update_position(jsp, ++p);
+        return json_result_token;
+        break;
+    case json_char_end_array:
+        jtok->type = json_token_end_array;
+        update_position(jsp, ++p);
+        return json_result_token;
+        break;
+    case json_char_begin_object:
+        jtok->type = json_token_begin_object;
+        update_position(jsp, ++p);
+        return json_result_token;
+        break;
+    case json_char_end_object:
+        jtok->type = json_token_end_object;
+        update_position(jsp, ++p);
+        return json_result_token;
+        break;
+    case json_char_name_separator:
+        jtok->type = json_token_name_separator;
+        update_position(jsp, ++p);
+        return json_result_token;
+        break;
+    case json_char_value_separator:
+        jtok->type = json_token_value_separator;
+        update_position(jsp, ++p);
+        return json_result_token;
+        break;
+    case 'f':
+        if ((p+4) >= stop) {
+            update_position(jsp, p);
+            goto need_more;
+        }
+        if ((*(p+1) == 'a') && (*(p+2) == 'l') &&
+            (*(p+3) == 's') && (*(p+4) == 'e')) {
+            jtok->type = json_token_false;
+            update_position(jsp, p+5);
+            return json_result_token;
+        }
+        break;
+    case 'n':
+        if ((p+3) >= stop) {
+            update_position(jsp, p);
+            goto need_more;
+        }
+        if ((*(p+1) == 'u') && (*(p+2) == 'l') && (*(p+3) == 'l')) {
+            jtok->type = json_token_null;
+            update_position(jsp, p+4);
+            return json_result_token;
+        }
+        break;
+    case 't':
+        if ((p+3) >= stop) {
+            update_position(jsp, p);
+            goto need_more;
+        }
+        if ((*(p+1) == 'r') && (*(p+2) == 'u') && (*(p+3) == 'e')) {
+            jtok->type = json_token_true;
+            update_position(jsp, p+4);
+            return json_result_token;
+        }
+        break;
+
+    case json_char_quotation_mark:
+        switch (json_string(p, stop, &jtok->value.string.string,
+                            &jtok->value.string.size, &p))
+        {
+        case 0:
+            update_position(jsp, p);
+            goto need_more;
+        case 1:
+            update_position(jsp, p);
+            jtok->value.string.need_free = 0;
+            jtok->type = json_token_string;
+            return json_result_token;
+        case 2:
+            update_position(jsp, p);
+            jtok->value.string.need_free = 1;
+            jtok->type = json_token_string;
+            return json_result_token;
+        }
+        break;
+    default:
+        if (((*p >= '0') && (*p <= '9')) || (*p == '-')) {
+            /* XXX proper number parser */
+            jtok->type = json_token_number;
+            jtok->value.number = 0;
+            for (;;) {
+                if (p == stop) {
+                    if (jsp->eof) {
+                        update_position(jsp, p);
+                        return json_result_token;
+                    } else {
+                        return json_result_more;
+                    }
+                }
+                if (((*p >= '0') && (*p <= '9')) || (*p == '.')) {
+                    jtok->value.number = (10 * jtok->value.number) + (*p - '0');
+                    p++;
+                } else {
+                    break;
+                }
+            }
+            update_position(jsp, p);
+            return json_result_token;
+        } else {
+            update_position(jsp, p);
+            /* FIXME set error token */
+            return json_result_error;
+        }
+    }
+need_more:
+    if (jsp->eof) {
+        jsp->token.type = json_token_error;
+        jsp->token.value.error.code = json_error_eof;
+        jsp->token.value.error.string = "premature end while scanning token";
+    } else {
+        return json_result_more;
+    }
+    /* NOT REACHED */
+    return json_result_error;
+}

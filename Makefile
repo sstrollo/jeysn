@@ -34,11 +34,17 @@ clean:
 	rm -f jtest *.beam erl_crash.dump *.o *.so
 
 
+test: all ejson_test.beam
+	$(ERL) -noshell -s ejson_test test
+
 
 PROPER = ../proper
 
 proper: all ejson_xxx_test.beam
-	$(ERL) -noshell -pz $(PROPER)/ebin -s ejson_xxx_test test -s erlang halt
+	$(ERL) -noshell -pz $(PROPER)/ebin -s ejson_xxx_test test
 
 ejson_xxx_test.beam: ejson_xxx_test.erl
 	$(ERLC) -I$(PROPER)/include -pz $(PROPER)/ebin $<
+
+p: all ejson_xxx_test.beam
+	$(ERL) -pz $(PROPER)/ebin

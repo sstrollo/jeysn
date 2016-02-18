@@ -5,7 +5,7 @@
 #include "erl_nif.h"
 #include "json.h"
 
-/* http://www.w3.org/TR/REC-xml/ */
+
 /* http://expat.sourceforge.net/ */
 
 
@@ -60,73 +60,6 @@ static ERL_NIF_TERM parse(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
             memcpy(ps->buf, bin.data, bin.size);
         }
         ps->ptr = ps->buf;
-    }
-    unsigned char *stop = ps->buf + ps->buf_sz;
-    for (;;) {
-        if (ps->ptr == stop) goto more_bytes;
-        if (isspace((int)*ps->ptr)) {
-            if (*ps->ptr == '\n') ps->lineno++;
-            ps->ptr++;
-        } else {
-            switch (*ps->ptr) {
-            case '{':
-            case '}':
-            case '[':
-            case ']':
-            case ':':
-            case ',':
-            {
-                ERL_NIF_TERM atom =
-                    enif_make_atom_len(env, (char *)ps->ptr, 1);
-                ps->ptr++;
-                return enif_make_tuple2(env, enif_make_int(env,2), atom);
-                break;
-            }
-/*
-            case 'f':
-                break;
-            case 'n':
-                break;
-            case 't':
-                break;
-*/
-            case '"':
-            {
-                unsigned char *str = NULL;
-                size_t sz = 0;
-                ERL_NIF_TERM bin;
-                switch (json_string(ps->ptr, stop, &str, &sz, &(ps->ptr)))
-                {
-                case -1:
-                    return enif_make_badarg(env);
-                case 0:
-                    goto more_bytes;
-                case 1:
-                    memcpy(enif_make_new_binary(env, sz, &bin), str, sz);
-                    break;
-                case 2:
-                    memcpy(enif_make_new_binary(env, sz, &bin), str, sz);
-                    free(str);
-                    break;
-                }
-                return enif_make_tuple2(env, enif_make_int(env,2), bin);
-            }
-            default:
-            {
-                unsigned char *p = ps->ptr;
-                for (; (p < stop) && !isspace((int)*p); p++) ;
-                if (isspace((int)*p)) {
-                    ERL_NIF_TERM atom =
-                        enif_make_atom_len(env, (char *)ps->ptr,
-                                           p - ps->ptr);
-                    ps->ptr = p;
-                    return enif_make_tuple2(env, enif_make_int(env,2), atom);
-                } else {
-                    goto more_bytes;
-                }
-            }
-            }
-        }
     }
 
     more_bytes:

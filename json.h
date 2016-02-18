@@ -3,13 +3,6 @@
 typedef unsigned char uchar;
 
 
-#define json_state_at_eob(JSP) (((JSP)->buf.buf == NULL) || \
-                                ((JSP)->buf.ptr == \
-                                 ((JSP)->buf.buf + (JSP)->buf.size)))
-#define json_state_at_eof(JSP) ((JSP)->eof && json_state_at_eob(JSP))
-
-#define json_state_set_eof(JSP) { (JSP)->eof = 1; }
-
 /*
 
       JSON-text = ws value ws
@@ -126,10 +119,7 @@ extern void json_state_destroy(json_state_t *jsp);
 
 extern void json_state_add_buffer(json_state_t *jsp, void *p, size_t sz);
 
+extern void json_state_set_eof(json_state_t *jsp);
+
 extern json_result_t json_next_token(json_state_t *jsp);
-
-extern int json_token(uchar *buf, uchar *stop, json_token_t *jtok, uchar **np);
-
-extern int json_string(unsigned char *buf, unsigned char *stop,
-                       unsigned char **str, size_t *size, unsigned char **np);
 

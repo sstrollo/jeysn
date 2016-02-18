@@ -1,10 +1,11 @@
 -module(ejson).
 
--export([init/0, init/1, init_string/1, init_string/2, data/2, next_token/2]).
+-export([init/0, init/1, init_string/1, init_string/2]).
+-export([data/2, eof/1, get_position/1, next_token/1, next_token/2]).
 
 %% tests
 -export([debug/1]).
--export([file/1, tokenize/1, xxx/1, xxxf/1]).
+-export([file/1, tokenize/1, xxx/1, xxxf/1, xxxrf/1]).
 
 -on_load(nif_load/0).
 
@@ -13,34 +14,82 @@
 -opaque ejson_tokenizer() :: <<>>.
 -export_type([ejson_tokenizer/0]).
 
--spec init(term()) -> ejson_tokenizer().
-init(_X) ->
-    nif_only().
+-type init_options() :: [init_option()] | init_option().
+-type init_option() :: {'string', string_format()}.
+
+-spec init(init_options()) -> ejson_tokenizer().
+init(Options) ->
+    init_nif(init_options(Options)).
 
 -spec init() -> ejson_tokenizer().
 init() ->
-    init([]).
+    nif_only().
 
+init_options([{string, StringFormat}|T]) ->
+    [{string, string_format_internal(StringFormat)}|init_options(T)];
+init_options([H|T]) ->
+    [H|init_options(T)];
+init_options([]) ->
+    [];
+init_options(Option) ->
+    init_options([Option]).
+
+init_nif(_Options) ->
+    nif_only().
+
+-spec init_string(iodata()) -> ejson_tokenizer().
 init_string(String) ->
     init_string([], String).
 
+-spec init_string(init_options(), iodata()) -> ejson_tokenizer().
 init_string(Options, String) ->
     S = init(Options),
     data(S, String),
-    data(S, eof),
+    eof(S),
     S.
 
 -spec data(ejson_tokenizer(), iodata()|'eof') -> 'ok'.
 data(_, _Data) ->
     nif_only().
 
--type string_format() :: 0..255.
+-spec eof(ejson_tokenizer()) -> 'ok'.
+eof(State) ->
+    data(State, 'eof').
+
+-type string_format() :: string_format_type() | {string_format_type(), 0..127}.
+-type string_format_type() :: 'binary' | 'string' | 'atom' | 'existing_atom'.
 -spec next_token(ejson_tokenizer(), string_format()) ->
-                        {'token', term()} | {'error', term()} | more | eof.
-next_token(_State, _StringFormat) ->
+                        {'token', term()} |
+                        {'error', term(), position()} |
+                        more |
+                        eof.
+next_token(State, StringFormat) ->
+    next_token_nif(State, string_format_internal(StringFormat)).
+
+next_token(State) ->
+    next_token_nif(State).
+
+next_token_nif(_State) ->
     nif_only().
 
+next_token_nif(_State, _InternalStringFormat) ->
+    nif_only().
 
+string_format_internal({Format, SplitChar}) when SplitChar >= 0,
+                                                 SplitChar =< 127 ->
+    {string_format_internal(Format), SplitChar};
+string_format_internal('binary')        -> 0;
+string_format_internal('string')        -> 1;
+string_format_internal('atom')          -> 2;
+string_format_internal('existing_atom') -> 3.
+
+-type position() :: {{Pos    :: non_neg_integer(),
+                      Line   :: non_neg_integer(),
+                      Column :: non_neg_integer()},
+                     Before::binary(), After::binary()}.
+-spec get_position(ejson_tokenizer()) -> position().
+get_position(_State) ->
+    nif_only().
 
 debug(_x) ->
     ok.
@@ -64,7 +113,7 @@ file_data(S, eof) ->
     data(S, eof).
 
 floop(State, ReadF, Res) ->
-    case next_token(State, 2) of
+    case next_token(State, string) of
         more ->
             _Debug = debug(State),
 %            io:format("Debug: ~p\n", [debug(State)]),
@@ -78,34 +127,34 @@ floop(State, ReadF, Res) ->
             io:format("Token: ~p\n", [Token]),
             floop(State, ReadF, [Token|Res]);
         {error, Error} ->
-            {error, Error, debug(State)}
+            {error, Error, get_position(State)}
     end.
 
 
 tokenize(Buffer) ->
     S = init_string(Buffer),
-    tokenize(S, [], next_token(S, 5)).
+    tokenize(S, [], next_token(S, {atom,$:})).
 
 tokenize(_S, Tokens, eof) ->
     lists:reverse(Tokens);
-tokenize(S, Tokens, more) ->
-    {incomplete, lists:reverse(Tokens), debug(S)};
 tokenize(S, Tokens, {error, Err}) ->
     {error, lists:reverse(Tokens), debug(S), Err};
 tokenize(S, Tokens, Token) ->
-    tokenize(S, [Token|Tokens], next_token(S, 5)).
+    tokenize(S, [Token|Tokens], next_token(S, {atom,$:})).
 
 
 xxx(Str) ->
     S = init_string(Str),
-    xxx_value(S, next_token(S, 2)).
+    xxx_value(S, next_token(S, string)).
 
 xxxf(FileName) ->
     BufSz = 16,
     {ok, Fd} = file:open(FileName, [read,binary,raw]),
     F = fun () -> file:read(Fd, BufSz) end,
-    xxx_value({init(), F}).
+    xxxrf(F).
 
+xxxrf(ReadFun) ->
+    xxx_value({init(), ReadFun}).
 
 xxx_value(S) ->
     xxx_value(S, xxx_next(S)).
@@ -165,7 +214,7 @@ xxx_array_next(S, Array) ->
     end.
 
 xxx_next({S, ReadF}) ->
-    case next_token(S, 2) of
+    case next_token(S, string) of
         more ->
             file_data(S, ReadF()),
             xxx_next({S, ReadF});
@@ -173,7 +222,7 @@ xxx_next({S, ReadF}) ->
             Token
     end;
 xxx_next(S) ->
-    next_token(S, 2).
+    next_token(S, string).
 
 
 %% ------------------------------------------------------------------------

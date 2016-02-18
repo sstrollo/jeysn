@@ -1,46 +1,99 @@
 -module(ejson_test).
 -compile(export_all).
--include_lib("proper/include/proper.hrl").
 
-prop_parse() ->
-    ?FORALL(String, json_string_chars(), begin ejson:xxx([$",String,$"]), true end).
+test() ->
+    try
+        ok = test1(),
+        ok = test1a(),
+        ok = test2a(),
+        ok = test2b(),
+        ok = test2c(),
+        erlang:halt(0)
+    catch
+        _Err:_What ->
+            io:format("~p: ~p\n~p\n", [_Err, _What, erlang:get_stacktrace()]),
+            erlang:halt(1)
+    end.
+
+%% ------------------------------------------------------------------------
+
+test1() ->
+    T = ejson:init_string("\"a\" \"b\" \"c\" \"x1x2x3\" \"atom\" \"bye\""),
+
+    {token,{string,"a"}} = ejson:next_token(T, string),
+
+    {token,{string,<<"b">>}} = ejson:next_token(T, binary),
+
+    {token,{string,c}} = ejson:next_token(T, atom),
+
+    {token,{string,<<"x1x2x3">>}} = ejson:next_token(T, existing_atom),
+
+    {token,{string,atom}} = ejson:next_token(T, existing_atom),
+
+    {token,{string,<<"bye">>}} = ejson:next_token(T),
+
+    eof = ejson:next_token(T),
+
+    ok.
 
 
-%% -type json_value() :: json_false() | json_null() | json_true() |
-%%                       json_number() | json_string() |
-%%                       json_array().
-%%                      json_array() | json_object().
+test1a() ->
+    T = ejson:init_string([{string,string}],
+                          "\"a\" \"b\" \"c\" \"x1x2x3\" \"atom\" \"bye\""),
 
-%% -type json_false() :: "false".
-%% -type json_null()  :: "null".
-%% -type json_true()  :: "true".
-%% -type json_string() :: [$", json_string_chars(), $"].
+    {token,{string,"a"}} = ejson:next_token(T, string),
 
--type json_string_chars() :: [json_string_char(),...].
--type json_string_char() :: 97..122.  %% $a..$z.
--type json_ws_char() :: 16#20 | 16#09 | 16#0a | 16#0d.
--type json_ws()      :: list(json_ws_char()).
+    {token,{string,<<"b">>}} = ejson:next_token(T, binary),
 
-%%-type json_array() :: ["[", json_array_items(), "]"].
-%%-type json_array_items() :: json_value() | [json_value(),",",json_value()].
-%%-type json_array_items() :: json_value() | json_array_items2().
+    {token,{string,c}} = ejson:next_token(T, atom),
 
-%% -type json_object() :: ["{", json_object_items(), "}"].
-%% -type json_object_items() :: json_object_item() |
-%%                              [json_object_item(), ",", json_object_item()].
-%% -type json_object_item() :: [json_string(), ":", json_value()].
+    {token,{string,<<"x1x2x3">>}} = ejson:next_token(T, existing_atom),
 
-json_number() ->
-    integer_to_list(integer()).
+    {token,{string,atom}} = ejson:next_token(T, existing_atom),
 
-%%json_string() -> [json_ws(), json_value(), json_ws()].
-%%json_string() -> [json_ws(), json_string(), json_ws()].
+    {token,{string,"bye"}} = ejson:next_token(T),
 
-json_false() -> "false".
-json_null()  -> "null".
-json_true()  -> "true".
+    eof = ejson:next_token(T),
 
-json_string() -> [$", json_string_chars(), $"].
+    ok.
 
-%%json_array() -> ["[", json_array_items(), "]"].
-%%json_array_items2() -> [json_value(),",",json_value()].
+
+
+test2a() ->
+    [{token,'{'},
+     {token,{string,<<"foo:bar">>}},
+     {token,':'},
+     {token,42},
+     {token,'}'}] = tokens("{ \"foo:bar\" : 42 }"),
+    ok.
+
+test2b() ->
+    [{token,'{'},
+     {token,{string,[foo|bar]}},
+     {token,':'},
+     {token,42},
+     {token,'}'}] = tokens([{string,{atom,$:}}], "{ \"foo:bar\" : 42 }"),
+    ok.
+
+test2c() ->
+    [{token,'{'},
+     {token,{string,"foo:bar"}},
+     {token,':'},
+     {token,42},
+     {token,'}'}] = tokens([{string,string}], "{ \"foo:bar\" : 42 }"),
+    ok.
+
+
+tokens(Buffer) ->
+    tokens([], Buffer).
+
+tokens(Opts, Buffer) ->
+    S = ejson:init_string(Opts, Buffer),
+    tokens(S, [], ejson:next_token(S)).
+
+tokens(_S, Tokens, eof) ->
+    lists:reverse(Tokens);
+tokens(_S, Tokens, {error, Err}) ->
+    {error, lists:reverse(Tokens), Err};
+tokens(S, Tokens, Token) ->
+    tokens(S, [Token|Tokens], ejson:next_token(S)).

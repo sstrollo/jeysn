@@ -6,7 +6,50 @@
 
 #include "json.h"
 
-
+const char *json_token_to_string(json_token_t *jt)
+{
+    switch (jt->type) {
+    case json_token_error:
+        /* XXX */
+        return "ERROR";
+    case json_token_begin_array:
+        return "[";
+        break;
+    case json_token_begin_object:
+        return "{";
+        break;
+    case json_token_end_array:
+        return "]";
+        break;
+    case json_token_end_object:
+        return "}";
+        break;
+    case json_token_name_separator:
+        return ":";
+        break;
+    case json_token_value_separator:
+        return ",";
+        break;
+    case json_token_false:
+        return "false";
+        break;
+    case json_token_null:
+        return "null";
+        break;
+    case json_token_true:
+        return "true";
+        break;
+    case json_token_number:
+    case json_token_number_unsigned:
+    case json_token_number_double:
+    case json_token_number_string:
+        return "NUMBER";
+        break;
+    case json_token_string:
+        return "STRING";
+    }
+    return "?";
+}
 
 void print_str(unsigned char *s, size_t sz)
 {
@@ -19,67 +62,10 @@ void print_str(unsigned char *s, size_t sz)
     printf("]\n");
 }
 
-void tokenize_string(char *string)
-{
-    unsigned char *str = (unsigned char *)(string ? string : "\"abc\"");
-    unsigned char *stop = str + strlen((char *)str);
-
-#if 1
-    for (;;) {
-        json_token_t jtok;
-        switch (json_token(str, stop, &jtok, &str)) {
-        case -1:
-            printf("ERROR\n");
-            goto done;
-        case 0:
-            printf("MORE BYTES\n");
-            goto done;
-            break;
-        case 1:
-            printf("TOKEN(%d) ", jtok.type);
-            if (jtok.type == json_token_string) {
-                print_str(jtok.value.string.string, jtok.value.string.size);
-                if (jtok.value.string.need_free) {
-                    free(jtok.value.string.string);
-                }
-            } else {
-                printf("\n");
-            }
-        }
-    }
-#endif
-#if 0
-    for (;;) {
-        unsigned char *res;
-        size_t size;
-        switch (json_string(str, stop, &res, &size, &str)) {
-        case -1:
-            printf("NOT A STRING\n");
-            goto done;
-            break;
-        case 0:
-            printf("MORE BYTES\n");
-            goto done;
-            break;
-        case 1:
-            print_str(res, size);
-            break;
-        case 2:
-            print_str(res, size);
-            free(res);
-            break;
-        }
-    }
-#endif
-done:
-    printf("REST: |%s|\n", (char *)str);
-
-}
-
 int main(int argc, char *argv[])
 {
     if (argc < 2) {
-        tokenize_string((argc>1) ? argv[1] : NULL);
+        exit(1);
     } else {
         json_state_t jsp;
         int bufsz = atoi(argv[1]);
@@ -92,14 +78,13 @@ int main(int argc, char *argv[])
         }
         for (;;) {
             switch (json_next_token(&jsp)) {
-            case -1:
+            case json_result_error:
                 printf("ERROR\n");
                 goto done;
-            case 0:
-                if (jsp.eof) {
-                    printf("EOF\n");
-                    goto done;
-                }
+            case json_result_eof:
+                printf("EOF\n");
+                goto done;
+            case json_result_more:
                 printf("MORE BYTES\n");
                 size_t rsz = read(fd, buf, bufsz);
                 if (rsz > 0) {
@@ -113,8 +98,9 @@ int main(int argc, char *argv[])
                     }
                 }
                 break;
-            case 1:
-                printf("TOKEN(%d) ", jsp.token.type);
+            case json_result_token:
+                printf("TOKEN(%d: %s) ", jsp.token.type,
+                       json_token_to_string(&jsp.token));
                 if (jsp.token.type == json_token_string) {
                     print_str(jsp.token.value.string.string,
                               jsp.token.value.string.size);
