@@ -117,26 +117,10 @@ void json_state_add_buffer(json_state_t *jsp, void *p, size_t sz)
     return;
 }
 
+/* ------------------------------------------------------------------------
 
-#define is_json_ws(C) (((C) == 0x20) || ((C) == 0x09) || \
-                       ((C) == 0x0a) || ((C) == 0x0d))
+  7.  Strings
 
-#define json_char_begin_array     (0x5b)  /* [ */
-#define json_char_end_array       (0x5d)  /* ] */
-#define json_char_begin_object    (0x7b)  /* { */
-#define json_char_end_object      (0x7d)  /* } */
-#define json_char_name_separator  (0x3a)  /* : */
-#define json_char_value_separator (0x2c)  /* , */
-
-#define json_char_quotation_mark  (0x22)
-#define json_char_escape          (0x5c)
-#define json_char_solidus         (0x2f)
-#define json_char_reverse_solidus (0x5c)
-
-
-
-
-/*
       char = unescaped /
           escape (
               %x22 /          ; "    quotation mark  U+0022
@@ -154,7 +138,20 @@ void json_state_add_buffer(json_state_t *jsp, void *p, size_t sz)
       quotation-mark = %x22      ; "
 
       unescaped = %x20-21 / %x23-5B / %x5D-10FFFF
-*/
+
+* ------------------------------------------------------------------------ */
+
+#define json_char_begin_array     (0x5b)  /* [ */
+#define json_char_end_array       (0x5d)  /* ] */
+#define json_char_begin_object    (0x7b)  /* { */
+#define json_char_end_object      (0x7d)  /* } */
+#define json_char_name_separator  (0x3a)  /* : */
+#define json_char_value_separator (0x2c)  /* , */
+
+#define json_char_quotation_mark  (0x22)
+#define json_char_escape          (0x5c)
+#define json_char_solidus         (0x2f)
+#define json_char_reverse_solidus (0x5c)
 
 static inline uchar get_hex_byte(uchar *s)
 {
@@ -176,37 +173,24 @@ static inline uchar get_hex_byte(uchar *s)
                         (((C) >= 'a') && ((C) <= 'f')) || \
                         (((C) >= 'A') && ((C) <= 'F')))
 
-/* return:
- *  -1 - start of something other than string found
- *   0 - more bytes (only ws or non-terminated string)
- *   1 - pointer to string of size 'size' (in your buffer)
- *   2 - pointer to translated string of size 'size' (you need to free())
- *
- * str size new_pos
- */
-int json_string(uchar *buf, uchar *stop,
-                uchar **str, size_t *size, uchar **np)
+/* Assumption: ptr is pointing to first quote of string */
+static json_result_t json_string(json_state_t *jsp)
 {
+    json_token_t *jtok = &jsp->token;
     int need_escape = 0;
     size_t sz = 0;
-    uchar *p, *start = buf;
-//    printf("parse_string: <%p> <%p> %d |%.*s|\n",
-//           buf, stop, (int)(stop - buf), (int)(stop - buf), buf);
-    for (p=start; (p < stop) && is_json_ws(*p); p++) ;
-    if (p == stop) { *np = p; return 0; }
-    if (*p != json_char_quotation_mark) {
-        *np = p;
-        return -1;
-    }
+    uchar *start, *p = jsp->buf.ptr;
+    uchar *stop = jsp->buf.stop;
+    if (++p == stop) { return json_result_error_on_eof(jsp); }
     start = p;
-    if (++p == stop) { *np = start; return 0; }
+
     /* Now p is looking at the first character of the string, first
      * scan to find end and figure out if we need to quote
      */
     for (;*p != json_char_quotation_mark;) {
 //        printf("parse_string: <%p> %c |%.*s|\n", p, *p, (int)(stop - p), p);
         if (*p == json_char_escape) {
-            if ((p+1) == stop) { *np = start; return 0; }
+            if ((p+1) == stop) { return json_result_error_on_eof(jsp); }
             p++;
             switch (*p) {
             case json_char_quotation_mark:
@@ -222,8 +206,10 @@ int json_string(uchar *buf, uchar *stop,
                 sz++;
                 break;
             case 'u':
-                /* XXX not if there is an end-quote within those five */
-                if ((p+5) >= stop) { *np = start; return 0; }
+                if ((p+5) >= stop) {
+                    /* XXX not if there is an end-quote within those five */
+                    return json_result_error_on_eof(jsp);
+                }
                 if (is_hex_char(*(p+1)) && is_hex_char(*(p+2)) &&
                     is_hex_char(*(p+3)) && is_hex_char(*(p+4)))
                 {
@@ -245,18 +231,21 @@ int json_string(uchar *buf, uchar *stop,
             p++;
             sz++;
         }
-        if (p == stop) { *np = start; return 0; }
+        if (p == stop) {
+            return json_result_error_on_eof(jsp);
+        }
     }
-    start++;
 //    printf("need_escape=%d %d %d |%.*s|\n",
 //           need_escape, (int)(p-start), (int)sz, (int)(p-start), start);
     if (!need_escape) {
-        *str = start;
-        *size = p - start;
-        *np = p + 1;
-        return 1;
+        jtok->type = json_token_string;
+        jtok->value.string.string = start;
+        jtok->value.string.size = p - start;
+        jtok->value.string.need_free = 0;
+        update_position(jsp, p + 1);
+        return json_result_token;
     } else {
-        uchar *src = start, *dst, *tmp = malloc(sz); /* XXX */
+        uchar *src = start, *dst, *tmp = jsp->alloc(sz);
         for (dst = tmp; src < p;) {
             if (*src == json_char_reverse_solidus) {
                 src++;
@@ -276,12 +265,10 @@ int json_string(uchar *buf, uchar *stop,
                         is_hex_char(*(src+3)) && is_hex_char(*(src+4)))
                     {
                         src++;
-//                        printf("xx1: |%.2s| %d\n", src, (int)get_hex_byte(src));
                         *dst = get_hex_byte(src);
                         if (*dst)
                             dst++;
                         src+=2;
-//                        printf("xx2: |%.2s| %d\n", src, (int)get_hex_byte(src));
                         *dst++ = get_hex_byte(src);
                         src+=2;
                     } else {
@@ -295,15 +282,19 @@ int json_string(uchar *buf, uchar *stop,
                 *dst++ = *src++;
             }
         }
-        *str = tmp;
-        *size = sz;
-        *np = p + 1;
-        return 2;
+        jtok->type = json_token_string;
+        jtok->value.string.string = tmp;
+        jtok->value.string.size = sz;
+        jtok->value.string.need_free = 1;
+        update_position(jsp, p + 1);
+        return json_result_token;
     }
 }
 
+/* ------------------------------------------------------------------------
 
-/*
+    6.  Numbers
+
       number = [ minus ] int [ frac ] [ exp ]
 
       decimal-point = %x2E       ; .
@@ -323,7 +314,8 @@ int json_string(uchar *buf, uchar *stop,
       plus = %x2B                ; +
 
       zero = %x30                ; 0
-*/
+
+* ------------------------------------------------------------------------ */
 
 /* Assumption: ptr is pointing to start of number  */
 static json_result_t json_number(json_state_t *jsp)
@@ -425,6 +417,10 @@ rescan:
     }
 }
 
+/* ------------------------------------------------------------------------ */
+
+#define is_json_ws(C) (((C) == 0x20) || ((C) == 0x09) || \
+                       ((C) == 0x0a) || ((C) == 0x0d))
 
 json_result_t json_next_token(json_state_t *jsp)
 {
@@ -508,25 +504,9 @@ json_result_t json_next_token(json_state_t *jsp)
             return json_result_token;
         }
         break;
-
     case json_char_quotation_mark:
-        switch (json_string(p, stop, &jtok->value.string.string,
-                            &jtok->value.string.size, &p))
-        {
-        case 0:
-            update_position(jsp, p);
-            goto need_more;
-        case 1:
-            update_position(jsp, p);
-            jtok->value.string.need_free = 0;
-            jtok->type = json_token_string;
-            return json_result_token;
-        case 2:
-            update_position(jsp, p);
-            jtok->value.string.need_free = 1;
-            jtok->type = json_token_string;
-            return json_result_token;
-        }
+        update_position(jsp, p);
+        return json_string(jsp);
         break;
     default:
         if (((*p >= '0') && (*p <= '9')) || (*p == '-')) {

@@ -1,3 +1,13 @@
+%%
+%%  The JavaScript Object Notation (JSON) Data Interchange Format
+%%
+%%  https://tools.ietf.org/html/rfc7159
+%%
+%%
+%%  JSON Encoding of Data Modeled with YANG
+%%
+%%  https://tools.ietf.org/html/draft-ietf-netmod-yang-json-02
+%%
 -module(ejson).
 
 -export([init/0, init/1, init_string/1, init_string/2]).
