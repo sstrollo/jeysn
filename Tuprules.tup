@@ -1,0 +1,48 @@
+
+PREFIX = /opt/local
+
+export HOME
+
+ERL  = $(PREFIX)/bin/erl
+ERLC = $(PREFIX)/bin/erlc
+
+!erlc = |> ^ erlc %f^ $(ERLC) $(ERLC_FLAGS) %f |> %B.beam
+
+
+## FIXME expand erts-*
+ERL_INCLUDE = $(PREFIX)/lib/erlang/erts-7.1/include
+
+
+NIF_INCLUDE = -I$(ERL_INCLUDE)
+
+CFLAGS += -Wall -g
+
+ifeq (@(TUP_PLATFORM),macosx)
+CC            = cc
+LD            = $(CC)
+NIF_LDFLAGS   = -bundle -undefined dynamic_lookup
+SHARED_CFLAGS = -fPIC -fno-common
+endif
+
+ifeq (@(TUP_PLATFORM),linux)
+CC            = gcc
+LD            = $(CC)
+NIF_LDFLAGS   = -shared
+SHARED_CFLAGS = -fpic
+endif
+
+ifeq (@(TUP_PLATFORM),freebsd)
+CC            = cc
+LD            = $(CC)
+NIF_LDFLAGS   = -shared
+SHARED_CFLAGS = -fpic
+endif
+
+
+!cc        = |> ^ cc %f ^ $(CC) $(CFLAGS) -c %f |> %B.o
+!cc_shared = |> ^ cc %f ^ $(CC) $(CFLAGS) $(SHARED_CFLAGS) -c %f |> %B.o
+!cc_nif    = |> ^ cc %f ^ \
+           $(CC) $(CFLAGS) $(SHARED_CFLAGS) $(NIF_INCLUDE) -c %f |> %B.o
+
+!ld        = |> ^ %o ^ $(LD) %f -o %o |>
+!ld_nif    = |> ^ %o ^ $(LD) $(NIF_LDFLAGS) %f -o %o |>

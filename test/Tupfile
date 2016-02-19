@@ -1,0 +1,15 @@
+include_rules
+
+CFLAGS += -I../c_src
+
+: jtest.c |> !cc |>
+: ../c_src/json.o jtest.o |> !ld |> jtest
+
+
+: ejson_test.erl |> !erlc |>
+
+ifdef PROPER
+: ejson_prop_test.erl |> !erlc -I$(PROPER) -pz $(PROPER) |>
+endif
+
+.gitignore

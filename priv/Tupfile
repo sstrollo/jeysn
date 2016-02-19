@@ -1,0 +1,6 @@
+include_rules
+
+: ../c_src/ejson.o ../c_src/json.o |> !ld_nif |> ejson_nif.so
+
+
+.gitignore

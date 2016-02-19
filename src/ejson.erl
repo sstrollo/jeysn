@@ -228,7 +228,12 @@ xxx_next(S) ->
 %% ------------------------------------------------------------------------
 
 nif_load() ->
-    erlang:load_nif("ejson_nif", 0).
+    case code:priv_dir(tts) of
+        {error,_} ->
+            erlang:load_nif(filename:append("../priv", "ejson_nif"), 0);
+        PrivDir ->
+            erlang:load_nif(filename:append(PrivDir, "ejson_nif"), 0)
+    end.
 
 nif_only() ->
     erlang:nif_error(not_loaded).
