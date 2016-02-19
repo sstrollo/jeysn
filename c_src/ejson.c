@@ -318,6 +318,37 @@ static ERL_NIF_TERM init(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
     return ret;
 }
 
+static ERL_NIF_TERM escape_string(ErlNifEnv* env, int argc,
+                                  const ERL_NIF_TERM argv[])
+{
+    int return_original_arg = 0;
+    ErlNifBinary bin;
+    if (enif_is_binary(env, argv[0]) &&
+        enif_inspect_binary(env, argv[0], &bin))
+    {
+        return_original_arg = 1;
+    } else {
+        if (!enif_inspect_iolist_as_binary(env, argv[0], &bin)) {
+            return enif_make_badarg(env);
+        }
+    }
+    {
+        size_t sz;
+        if (json_string_escape_size(bin.data, bin.size, &sz)) {
+            ERL_NIF_TERM newbin;
+            uchar *dst = enif_make_new_binary(env, sz, &newbin);
+            json_string_escape(bin.data, bin.size, dst, sz);
+            return newbin;
+        } else {
+            if (return_original_arg) {
+                return argv[0];
+            } else {
+                return enif_make_binary(env, &bin);
+            }
+        }
+    }
+}
+
 
 static int atload(ErlNifEnv* env, void** priv_data, ERL_NIF_TERM load_info)
 {
@@ -359,6 +390,7 @@ static ErlNifFunc nif_funcs[] = {
     , {"data", 2, data}
     , {"get_position", 1, get_position}
     , {"debug", 1, debug}
+    , {"escape_string", 1, escape_string}
 };
 
 ERL_NIF_INIT(ejson, nif_funcs, atload, NULL, NULL, NULL);

@@ -13,6 +13,8 @@
 -export([init/0, init/1, init_string/1, init_string/2]).
 -export([data/2, eof/1, get_position/1, next_token/1, next_token/2]).
 
+-export([encode_string/1, escape_string/1]).
+
 %% tests
 -export([debug/1]).
 -export([file/1, tokenize/1, xxx/1, xxxf/1, xxxrf/1]).
@@ -103,6 +105,16 @@ get_position(_State) ->
 
 debug(_x) ->
     ok.
+
+%% ------------------------------------------------------------------------
+
+-spec encode_string(iodata()) -> iodata().
+encode_string(Str) ->
+    [$", escape_string(Str), $"].
+
+-spec escape_string(iodata()) -> binary().
+escape_string(_Str) ->
+    nif_only().
 
 %% ------------------------------------------------------------------------
 

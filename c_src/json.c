@@ -521,3 +521,62 @@ json_result_t json_next_token(json_state_t *jsp)
 need_more:
     return json_result_error_on_eof(jsp);
 }
+
+#define is_unescaped_json_char(C) ( ((C) == 0x20) || ((C) == 0x21) || \
+                                    (((C) >= 0x23) && ((C) <= 0x5b)) || \
+                                    (((C) >= 0x5d) && ((C) <= 0x7e)) )
+
+int json_string_escape_size(uchar *start, size_t size, size_t *newsize)
+{
+    int needs_escape = 0;
+    uchar *p, *stop = start + size;
+
+    for (p = start; p < stop; p++) {
+        if (!is_unescaped_json_char(*p)) {
+            needs_escape = 1;
+            break;
+        }
+    }
+    if (needs_escape) {
+        size_t sz = p - start;
+        for (; p < stop; sz++,p++) {
+            switch (*p) {
+            case 0x22:
+            case 0x5C:
+            case 0x08:
+            case 0x0C:
+            case 0x0A:
+            case 0x0D:
+            case 0x09:
+                sz++;
+                break;
+                /* FIXME UNICODE */
+            }
+        }
+        *newsize = sz;
+        return 1;
+    } else {
+        *newsize = size;
+        return 0;
+    }
+}
+
+int json_string_escape(uchar *src, size_t size, uchar *dst, size_t dst_size)
+{
+    uchar *stop = src + size;
+    for (; src<stop; src++,dst++) {
+        switch (*src) {
+        case 0x22: *dst++ = json_char_reverse_solidus; *dst = *src; break;
+        case 0x5C: *dst++ = json_char_reverse_solidus; *dst = *src; break;
+        case 0x08: *dst++ = json_char_reverse_solidus; *dst = 'b'; break;
+        case 0x0C: *dst++ = json_char_reverse_solidus; *dst = 'f'; break;
+        case 0x0A: *dst++ = json_char_reverse_solidus; *dst = 'n'; break;
+        case 0x0D: *dst++ = json_char_reverse_solidus; *dst = 'r'; break;
+        case 0x09: *dst++ = json_char_reverse_solidus; *dst = 't'; break;
+            /* FIXME UNICODE */
+        default:
+            *dst = *src;
+        }
+    }
+    return 1;
+}

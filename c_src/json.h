@@ -123,3 +123,6 @@ extern void json_state_set_eof(json_state_t *jsp);
 
 extern json_result_t json_next_token(json_state_t *jsp);
 
+extern int json_string_escape_size(uchar *start, size_t size, size_t *newsize);
+extern int json_string_escape(uchar *src, size_t size,
+                              uchar *dst, size_t dst_size);
