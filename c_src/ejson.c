@@ -17,7 +17,6 @@ static ERL_NIF_TERM am_json_token_null;
 static ERL_NIF_TERM am_json_token_true;
 static ERL_NIF_TERM am_more;
 static ERL_NIF_TERM am_eof;
-static ERL_NIF_TERM am_token;
 static ERL_NIF_TERM am_string;
 static ERL_NIF_TERM am_number;
 static ERL_NIF_TERM am_error;
@@ -209,9 +208,7 @@ static ERL_NIF_TERM next_token(ErlNifEnv* env,
                                     token,
                                     make_position(env, ejs));
         } else {
-            return enif_make_tuple2(env,
-                                    enif_make_copy(env, am_token),
-                                    token);
+            return token;
         }
     }
     case json_result_error:
@@ -377,7 +374,6 @@ static int atload(ErlNifEnv* env, void** priv_data, ERL_NIF_TERM load_info)
     am_json_token_true = enif_make_atom(env, "true");
     am_more = enif_make_atom(env, "more");
     am_eof = enif_make_atom(env, "eof");
-    am_token = enif_make_atom(env, "token");
     am_string = enif_make_atom(env, "string");
     am_number = enif_make_atom(env, "number");
     am_error = enif_make_atom(env, "error");

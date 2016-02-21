@@ -68,10 +68,18 @@ data(_, _Data) ->
 eof(State) ->
     data(State, 'eof').
 
+-type json_token() :: '[' | '{' | '}' | ']' | ':' | ','
+                    | 'false' | 'null' | 'true'
+                    | number() | {'number', string()}
+                    | {'string', json_string_representation()}.
+-type json_string_representation() :: json_string_type() |
+                                      [json_string_type()|json_string_type()].
+-type json_string_type() :: binary() | list() | atom().
+
 -type string_format() :: string_format_type() | {string_format_type(), 0..127}.
 -type string_format_type() :: 'binary' | 'string' | 'atom' | 'existing_atom'.
 -spec next_token(ejson_tokenizer(), string_format()) ->
-                        {'token', term()} |
+                        json_token() |
                         {'error', term(), position()} |
                         more |
                         eof.
@@ -148,11 +156,11 @@ floop(State, ReadF, Res) ->
             _Debug = debug(State),
 %            io:format("Debug: ~p\n", [debug(State)]),
             lists:reverse(Res);
-        {token, Token} ->
-            io:format("Token: ~p\n", [Token]),
-            floop(State, ReadF, [Token|Res]);
         {error, Error} ->
-            {error, Error, get_position(State)}
+            {error, Error, get_position(State)};
+        Token ->
+            io:format("Token: ~p\n", [Token]),
+            floop(State, ReadF, [Token|Res])
     end.
 
 
@@ -185,7 +193,7 @@ xxx_value(S) ->
     xxx_value(S, xxx_next(S)).
 
 %% looking-for: false/null/true/number/string/begin-array/begin-object
-xxx_value(S, {token, Token}) ->
+xxx_value(S, Token) ->
     case Token of
         false -> false;
         null -> null;
@@ -199,41 +207,41 @@ xxx_value(S, {token, Token}) ->
 %% looking-for: member/end-object
 xxx_object(S) ->
     case xxx_next(S) of
-        {token, '}'} ->
+        '}' ->
             {struct, []};
-        Token = {token, _} ->
+        Token ->
             xxx_object_member(S, Token, [])
     end.
 
-xxx_object_member(S, {token, {string, Key}}, Members) ->
+xxx_object_member(S, {string, Key}, Members) ->
     case xxx_next(S) of
-        {token, ':'} ->
+        ':' ->
             Value = xxx_value(S),
             xxx_object_next(S, [{Key, Value}|Members])
     end.
 
 xxx_object_next(S, Members) ->
     case xxx_next(S) of
-        {token, '}'} ->
+        '}' ->
             {struct, lists:reverse(Members)};
-        {token, ','} ->
+        ',' ->
             xxx_object_member(S, xxx_next(S), Members)
     end.
 
 xxx_array(S) ->
     case xxx_next(S) of
-        {token, ']'} ->
+        ']' ->
             {array, []};
-        Token = {token, _} ->
+        Token ->
             Value = xxx_value(S, Token),
             xxx_array_next(S, [Value])
     end.
 
 xxx_array_next(S, Array) ->
     case xxx_next(S) of
-        {token, ']'} ->
+        ']' ->
             {array, lists:reverse(Array)};
-        {token, ','} ->
+        ',' ->
             Value = xxx_value(S),
             xxx_array_next(S, [Value|Array])
     end.
@@ -253,7 +261,7 @@ xxx_next(S) ->
 %% ------------------------------------------------------------------------
 
 nif_load() ->
-    case code:priv_dir(tts) of
+    case code:priv_dir(eparse) of
         {error,_} ->
             erlang:load_nif(filename:append("../priv", "ejson_nif"), 0);
         PrivDir ->

@@ -50,7 +50,6 @@ same_numbers(T, [N|Ns]) ->
             false
     end.
 
-same_number(N, {token, T}) -> same_number(N, T);
 same_number(N, {number, N}) -> true;
 same_number(N, N) -> true;
 same_number(N, {number, Str}) when is_list(Str) ->
@@ -82,7 +81,7 @@ verify_escape_u_encoding(X) ->
     Bin = <<X/utf8,X/utf8>>,
 %%    io:format("\n~s\n", [[Str1,Str2]]),
     T = ejson:init_string([$", Str1, Str2, $"]),
-    {token, {string, Bin}} == ejson:next_token(T)
+    {string, Bin} == ejson:next_token(T)
         andalso eof == ejson:next_token(T).
 
 json_escape_u(CodePoint) when CodePoint =< 16#ffff ->

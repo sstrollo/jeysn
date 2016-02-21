@@ -22,17 +22,17 @@ test() ->
 test1() ->
     T = ejson:init_string("\"a\" \"b\" \"c\" \"x1x2x3\" \"atom\" \"bye\""),
 
-    {token,{string,"a"}} = ejson:next_token(T, string),
+    {string,"a"} = ejson:next_token(T, string),
 
-    {token,{string,<<"b">>}} = ejson:next_token(T, binary),
+    {string,<<"b">>} = ejson:next_token(T, binary),
 
-    {token,{string,c}} = ejson:next_token(T, atom),
+    {string,c} = ejson:next_token(T, atom),
 
-    {token,{string,<<"x1x2x3">>}} = ejson:next_token(T, existing_atom),
+    {string,<<"x1x2x3">>} = ejson:next_token(T, existing_atom),
 
-    {token,{string,atom}} = ejson:next_token(T, existing_atom),
+    {string,atom} = ejson:next_token(T, existing_atom),
 
-    {token,{string,<<"bye">>}} = ejson:next_token(T),
+    {string,<<"bye">>} = ejson:next_token(T),
 
     eof = ejson:next_token(T),
 
@@ -43,17 +43,17 @@ test1a() ->
     T = ejson:init_string([{string,string}],
                           "\"a\" \"b\" \"c\" \"x1x2x3\" \"atom\" \"bye\""),
 
-    {token,{string,"a"}} = ejson:next_token(T, string),
+    {string,"a"} = ejson:next_token(T, string),
 
-    {token,{string,<<"b">>}} = ejson:next_token(T, binary),
+    {string,<<"b">>} = ejson:next_token(T, binary),
 
-    {token,{string,c}} = ejson:next_token(T, atom),
+    {string,c} = ejson:next_token(T, atom),
 
-    {token,{string,<<"x1x2x3">>}} = ejson:next_token(T, existing_atom),
+    {string,<<"x1x2x3">>} = ejson:next_token(T, existing_atom),
 
-    {token,{string,atom}} = ejson:next_token(T, existing_atom),
+    {string,atom} = ejson:next_token(T, existing_atom),
 
-    {token,{string,"bye"}} = ejson:next_token(T),
+    {string,"bye"} = ejson:next_token(T),
 
     eof = ejson:next_token(T),
 
@@ -62,27 +62,18 @@ test1a() ->
 
 
 test2a() ->
-    [{token,'{'},
-     {token,{string,<<"foo:bar">>}},
-     {token,':'},
-     {token,42},
-     {token,'}'}] = tokens("{ \"foo:bar\" : 42 }"),
+    ['{', {string,<<"foo:bar">>}, ':', 42, '}'] =
+        tokens("{ \"foo:bar\" : 42 }"),
     ok.
 
 test2b() ->
-    [{token,'{'},
-     {token,{string,[foo|bar]}},
-     {token,':'},
-     {token,42},
-     {token,'}'}] = tokens([{string,{atom,$:}}], "{ \"foo:bar\" : 42 }"),
+    ['{', {string,[foo|bar]}, ':', 42, '}'] =
+        tokens([{string,{atom,$:}}], "{ \"foo:bar\" : 42 }"),
     ok.
 
 test2c() ->
-    [{token,'{'},
-     {token,{string,"foo:bar"}},
-     {token,':'},
-     {token,42},
-     {token,'}'}] = tokens([{string,string}], "{ \"foo:bar\" : 42 }"),
+    ['{', {string,"foo:bar"}, ':', 42, '}'] =
+        tokens([{string,string}], "{ \"foo:bar\" : 42 }"),
     ok.
 
 %% 0x1D11E =  0001  11001 0001  0001 1110
@@ -109,7 +100,7 @@ test3() ->
     lists:foreach(
       fun ({Esc, Bin}) ->
               case tokens([$",Esc,$"]) of
-                  [{token,{string,Bin}}] ->
+                  [{string,Bin}] ->
                       %% io:format("~tp\n", [Bin]),
                       ok;
                   Other ->
@@ -118,7 +109,7 @@ test3() ->
               end;
           ({Esc, Bin, UnicodeList}) ->
               case tokens([$",Esc,$"]) of
-                  [{token,{string,Bin}}] ->
+                  [{string,Bin}] ->
                       %% Note: also see unicode:characters_to_binary/1
                       case unicode:characters_to_list(Bin, utf8) of
                           UnicodeList ->
