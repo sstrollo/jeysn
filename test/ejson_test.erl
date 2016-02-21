@@ -9,6 +9,7 @@ test() ->
         ok = test2b(),
         ok = test2c(),
         ok = test3(),
+        io:format("OK\n", []),
         erlang:halt(0)
     catch
         _Err:_What ->
@@ -95,12 +96,38 @@ test3() ->
          , {"\\u20aC",        <<16#e2,16#82,16#ac>>}        % CodePoint 0x20AC
          , {"\\uD800\\uDF48", <<16#f0,16#90,16#8d,16#88>>}  % CodePoint 0x10348
          , {"\\uD834\\uDD1E", <<16#1d11e/utf8>>}            % CodePoint 0x1D11E
+
+         , {"\\u0041\\u2262\\u0391\\u002E",
+            <<16#41, 16#E2, 16#89, 16#A2, 16#CE, 16#91, 16#2E>>,
+            [16#0041, 16#2262, 16#0391, 16#002e]}
+         , {"\\uD55C\\uAD6D\\uC5B4",
+            <<16#ED, 16#95, 16#9C, 16#EA, 16#B5, 16#AD, 16#EC, 16#96, 16#B4>>,
+            [16#D55C, 16#AD6D, 16#C5B4]}
+         , {"\\u65E5\\u672C\\u8A9E",
+            <<16#E6, 16#97, 16#A5, 16#E6, 16#9C, 16#AC, 16#E8, 16#AA, 16#9E>>}
         ],
     lists:foreach(
       fun ({Esc, Bin}) ->
               case tokens([$",Esc,$"]) of
                   [{token,{string,Bin}}] ->
+                      %% io:format("~tp\n", [Bin]),
                       ok;
+                  Other ->
+                      io:format("~p != ~p\n", [Other, Bin]),
+                      exit(error)
+              end;
+          ({Esc, Bin, UnicodeList}) ->
+              case tokens([$",Esc,$"]) of
+                  [{token,{string,Bin}}] ->
+                      %% Note: also see unicode:characters_to_binary/1
+                      case unicode:characters_to_list(Bin, utf8) of
+                          UnicodeList ->
+                              %% io:format("~tp\n", [Bin]),
+                              ok;
+                          Other ->
+                              io:format("~p != ~p\n", [Other, Bin]),
+                              exit(error)
+                      end;
                   Other ->
                       io:format("~p != ~p\n", [Other, Bin]),
                       exit(error)

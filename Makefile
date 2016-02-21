@@ -7,7 +7,14 @@ ERLC = $(PREFIX)/bin/erlc
 ERL_INCLUDE = $(wildcard $(PREFIX)/lib/erlang/erts-*/include)
 
 
-all: priv/ejson_nif.so ebin/ejson.beam test/jtest
+all:
+	tup
+
+make: build
+
+build: priv/ejson_nif.so ebin/ejson.beam test/jtest
+
+.PHONY: all make build
 
 ebin/%.beam: src/%.erl
 	$(ERLC) -o $(dir $@) $<
@@ -44,12 +51,12 @@ test: all test/ejson_test.beam
 
 PROPER = $(shell pwd)/../proper
 
-proper: all test/ejson_xxx_test.beam
+proper: all test/ejson_prop_test.beam
 	cd test && \
-	  $(ERL) -noshell -pa ../ebin -pz $(PROPER)/ebin -s ejson_xxx_test test
+	  $(ERL) -noshell -pa ../ebin -pz $(PROPER)/ebin -s ejson_prop_test test
 
-test/ejson_xxx_test.beam: test/ejson_xxx_test.erl
+test/ejson_prop_test.beam: test/ejson_prop_test.erl
 	$(ERLC) -I$(PROPER)/include -pz $(PROPER)/ebin -o $(dir $@) $<
 
-p: all ejson_xxx_test.beam
+p: all ejson_prop_test.beam
 	$(ERL) -pz $(PROPER)/ebin

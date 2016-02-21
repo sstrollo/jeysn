@@ -7,9 +7,7 @@ CFLAGS += -I../c_src
 
 
 : ejson_test.erl |> !erlc |>
-
-ifdef PROPER
-: ejson_prop_test.erl |> !erlc -I$(PROPER) -pz $(PROPER) |>
-endif
+: ejson_prop_test.erl |> ^ erlc %f^ \
+  $(ERLC) $(ERLC_FLAGS) -I$(PROPER)/include -pz $(PROPER)/ebin %f |> %B.beam
 
 .gitignore
