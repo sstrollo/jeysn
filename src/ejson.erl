@@ -112,6 +112,9 @@ debug(_x) ->
 encode_string(Str) ->
     [$", escape_string(Str), $"].
 
+%% Note only characters required to be escaped are escaped. Any UTF-8
+%% code points in the input string are assumed to be correct, and will
+%% be returned as is.
 -spec escape_string(iodata()) -> binary().
 escape_string(_Str) ->
     nif_only().

@@ -22,7 +22,7 @@ s() ->
 
 -type json_string() :: json_string_chars().
 -type json_string_chars() :: [json_string_char(),...].
--type json_string_char() :: 48..57|65..90|97..122.  %% [0-9a-zA-Z]
+-type json_string_char() :: 32|48..57|65..90|97..122.  %% [ 0-9a-zA-Z]
 
 -type json_array() :: {'array', [json_value()]}.
 
@@ -58,6 +58,96 @@ same_number(N, {number, Str}) when is_list(Str) ->
 same_number(N1, N2) ->
     io:format("~p != ~p\n", [N1, N2]),
     false.
+
+%% Basic Multilingual Plane
+unicode_bmp() ->
+    oneof([range(0,16#D7FF),range(16#E000,16#FFFF)]).
+
+%% Supplementary Planes
+unicode_sp() ->
+    range(16#10000, 16#10FFFF).
+
+valid_utf8_codepoint() ->
+    oneof([unicode_bmp(), unicode_sp()]).
+
+prop_utf8_escaped_bmp() ->
+    ?FORALL(X, unicode_bmp(), verify_escape_u_encoding(X)).
+
+prop_utf8_escaped_sp() ->
+    ?FORALL(X, unicode_sp(), verify_escape_u_encoding(X)).
+
+verify_escape_u_encoding(X) ->
+    Str1 = json_escape_u(X),
+    Str2 = json_escape_l(X),
+    Bin = <<X/utf8,X/utf8>>,
+%%    io:format("\n~s\n", [[Str1,Str2]]),
+    T = ejson:init_string([$", Str1, Str2, $"]),
+    {token, {string, Bin}} == ejson:next_token(T)
+        andalso eof == ejson:next_token(T).
+
+json_escape_u(CodePoint) when CodePoint =< 16#ffff ->
+    io_lib:format("\\u~4.16.0B", [CodePoint]);
+json_escape_u(CodePoint) ->
+    <<N1:16/unsigned, N2:16/unsigned>> = <<CodePoint/utf16>>,
+    [json_escape_u(N1),json_escape_u(N2)].
+
+json_escape_l(CodePoint) when CodePoint =< 16#ffff ->
+    io_lib:format("\\u~4.16.0b", [CodePoint]);
+json_escape_l(CodePoint) ->
+    <<N1:16/unsigned, N2:16/unsigned>> = <<CodePoint/utf16>>,
+    [json_escape_l(N1),json_escape_l(N2)].
+
+
+invalid_escape_u_sequence() ->
+    oneof([escape_u_without_hex(),
+           escape_u_with_invalid_cp_followed_by_non_escape_u()]).
+
+escape_u_with_invalid_cp_followed_by_non_escape_u() ->
+    ?LET(X, oneof([range(16#DC00,16#DFFF), range(16#D800,16#DBFF)]),
+         begin
+%%             io:format("\nEEE ~s\n", [json_escape_u(X)]),
+             lists:flatten([json_escape_u(X),
+                            non_empty(list(json_string_char_extended()))])
+         end).
+
+escape_u_without_hex() ->
+    [$\\,$u|non_empty(list(non_hex_char()))].
+
+
+non_hex_char() ->
+    ?SUCHTHAT(X, json_string_char_extended(),
+              not(lists:member(X, "0123456789abcdefABCDEF"))).
+
+%% All printable ascii, except reverse solidus (92) and quote (34)
+json_string_char_extended() ->
+    ?SUCHTHAT(X, range(32,126), (X /= 34) andalso (X /= 92)).
+
+invalid_escape_sequence() ->
+    [$\\,non_escape_char()].
+non_escape_char() ->
+    ?SUCHTHAT(X, json_string_char_extended(), not(lists:member(X, "/bfnrtu"))).
+
+prop_skip_invalid_escape_sequence() ->
+    ?FORALL([Pre, Seq, Post],
+            [json_string_chars(),invalid_escape_sequence(),json_string_chars()],
+            begin
+                String = lists:flatten([Pre,Seq,Post]),
+                JSON_Value = [$", String, $"],
+%%                io:format("\n~w ~w\n", [String, ejson:xxx(JSON_Value)]),
+                String == ejson:xxx(JSON_Value)
+            end).
+
+prop_skip_invalid_escape_u_sequence() ->
+    ?FORALL([Pre, Seq, Post],
+            [json_string_chars(),
+             invalid_escape_u_sequence(),
+             json_string_chars()],
+            begin
+                String = lists:flatten([Pre,Seq,Post]),
+                JSON_Value = [$", String, $"],
+%%                io:format("\n~w ~w\n", [String, ejson:xxx(JSON_Value)]),
+                String == ejson:xxx(JSON_Value)
+            end).
 
 %%-type json_ws_char() :: 16#20 | 16#09 | 16#0a | 16#0d.
 %%-type json_ws()      :: [json_ws_char()].

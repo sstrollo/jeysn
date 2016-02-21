@@ -334,12 +334,17 @@ static ERL_NIF_TERM escape_string(ErlNifEnv* env, int argc,
     }
     {
         size_t sz;
-        if (json_string_escape_size(bin.data, bin.size, &sz)) {
+        switch (json_string_escape_size(bin.data, bin.size, &sz)) {
+        case -1:
+            return enif_make_badarg(env);
+        case 1:
+        {
             ERL_NIF_TERM newbin;
             uchar *dst = enif_make_new_binary(env, sz, &newbin);
             json_string_escape(bin.data, bin.size, dst, sz);
             return newbin;
-        } else {
+        }
+        default:
             if (return_original_arg) {
                 return argv[0];
             } else {
@@ -348,7 +353,6 @@ static ERL_NIF_TERM escape_string(ErlNifEnv* env, int argc,
         }
     }
 }
-
 
 static int atload(ErlNifEnv* env, void** priv_data, ERL_NIF_TERM load_info)
 {

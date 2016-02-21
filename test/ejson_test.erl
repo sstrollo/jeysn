@@ -8,6 +8,7 @@ test() ->
         ok = test2a(),
         ok = test2b(),
         ok = test2c(),
+        ok = test3(),
         erlang:halt(0)
     catch
         _Err:_What ->
@@ -81,6 +82,30 @@ test2c() ->
      {token,':'},
      {token,42},
      {token,'}'}] = tokens([{string,string}], "{ \"foo:bar\" : 42 }"),
+    ok.
+
+%% 0x1D11E =  0001  11001 0001  0001 1110
+%% UTF-8: 11110000 10011001 10000100 10011110
+
+
+test3() ->
+    L =
+        [{"\\u0024",          <<16#24>>}                    % CodePoint 0x24
+         , {"\\u00a2",        <<16#c2,16#a2>>}              % CodePoint 0xA2
+         , {"\\u20aC",        <<16#e2,16#82,16#ac>>}        % CodePoint 0x20AC
+         , {"\\uD800\\uDF48", <<16#f0,16#90,16#8d,16#88>>}  % CodePoint 0x10348
+         , {"\\uD834\\uDD1E", <<16#1d11e/utf8>>}            % CodePoint 0x1D11E
+        ],
+    lists:foreach(
+      fun ({Esc, Bin}) ->
+              case tokens([$",Esc,$"]) of
+                  [{token,{string,Bin}}] ->
+                      ok;
+                  Other ->
+                      io:format("~p != ~p\n", [Other, Bin]),
+                      exit(error)
+              end
+      end, L),
     ok.
 
 

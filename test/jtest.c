@@ -3,6 +3,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <ctype.h>
 
 #include "json.h"
 
@@ -51,15 +52,32 @@ const char *json_token_to_string(json_token_t *jt)
     return "?";
 }
 
-void print_str(unsigned char *s, size_t sz)
+void print_str(uchar *str, size_t sz)
 {
-    int i;
+    int i; uchar *s;
     printf("%d [", (int)sz);
-    for (i=0; i<sz; s++, i++) {
+    for (i=0, s=str; i<sz; s++, i++) {
         printf("%d", (int)*s);
         if ((i+1) < sz) { printf(","); }
     }
-    printf("]\n");
+    printf("]");
+    printf(" [");
+    for (i=0, s=str; i<sz; s++, i++) {
+        printf("0x%02x", (int)*s);
+        if ((i+1) < sz) { printf(","); }
+    }
+    printf("]");
+    printf(" [");
+    for (i=0, s=str; i<sz; s++, i++) {
+        int c = (int)*s;
+        if (isprint(c))
+            printf("'%c'", c);
+        else
+            printf("'\\%03o'", c);
+        if ((i+1) < sz) { printf(","); }
+    }
+    printf("]");
+    printf("\n");
 }
 
 int main(int argc, char *argv[])

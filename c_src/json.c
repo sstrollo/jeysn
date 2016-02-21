@@ -153,6 +153,7 @@ void json_state_add_buffer(json_state_t *jsp, void *p, size_t sz)
 #define json_char_solidus         (0x2f)
 #define json_char_reverse_solidus (0x5c)
 
+#if 0
 static inline uchar get_hex_byte(uchar *s)
 {
     uchar *ptr = s;
@@ -168,10 +169,143 @@ static inline uchar get_hex_byte(uchar *s)
     return res;
 #undef HEXCHAR
 }
+#endif
+
+static inline uint32_t get_hex_2byte(uchar *s)
+{
+    uchar *ptr = s;
+    uint32_t res = 0;
+#define HEXCHAR(C) ( \
+        (((C) >= '0') && ((C) <= '9')) ? (C) - '0' :        \
+        (((C) >= 'a') && ((C) <= 'f')) ? ((C) - 'a') + 10 :     \
+        (((C) >= 'A') && ((C) <= 'F')) ? ((C) - 'A') + 10 : 0)
+    res = HEXCHAR(*ptr);  ptr++;
+    res *= 16;
+    res += HEXCHAR(*ptr); ptr++;
+    res *= 16;
+    res += HEXCHAR(*ptr); ptr++;
+    res *= 16;
+    res += HEXCHAR(*ptr);
+    return res;
+#undef HEXCHAR
+}
 
 #define is_hex_char(C) ((((C) >= '0') && ((C) <= '9')) || \
                         (((C) >= 'a') && ((C) <= 'f')) || \
                         (((C) >= 'A') && ((C) <= 'F')))
+
+
+/*
+   Any character may be escaped.  If the character is in the Basic
+   Multilingual Plane (U+0000 through U+FFFF), then it may be
+   represented as a six-character sequence: a reverse solidus, followed
+   by the lowercase letter u, followed by four hexadecimal digits that
+   encode the character's code point.  The hexadecimal letters A though
+   F can be upper or lower case.  So, for example, a string containing
+   only a single reverse solidus character may be represented as
+   "\u005C".
+
+   Alternatively, there are two-character sequence escape
+   representations of some popular characters.  So, for example, a
+   string containing only a single reverse solidus character may be
+   represented more compactly as "\\".
+
+   To escape an extended character that is not in the Basic Multilingual
+   Plane, the character is represented as a 12-character sequence,
+   encoding the UTF-16 surrogate pair.  So, for example, a string
+   containing only the G clef character (U+1D11E) may be represented as
+   "\uD834\uDD1E".
+*/
+
+#define utf16_high_surrogate_start (0xD800)
+#define utf16_low_surrogate_start  (0xDC00)
+#define is_utf16_high_surrogate_range(N) (((N) >= 0xD800) && ((N) <= 0xDBFF))
+#define is_utf16_low_surrogate_range(N)  (((N) >= 0xDC00) && ((N) <= 0xDFFF))
+#define is_unicode_reserved_range(N)     (((N) >= 0xD800) && ((N) <= 0xDFFF))
+
+/* pointing to 'u' followed by  */
+/* return 0 : need more, -1 invalid,  */
+static inline int json_utf8_escaped_width(uchar *p, uchar *stop, uint32_t *cp)
+{
+    if ((p+5) >= stop) {
+        return 0;
+    }
+    if (is_hex_char(*(p+1)) && is_hex_char(*(p+2)) &&
+        is_hex_char(*(p+3)) && is_hex_char(*(p+4)))
+    {
+        uint32_t i = get_hex_2byte(p+1);
+        if (is_utf16_high_surrogate_range(i)) {
+            if ((p+11) >= stop ) {
+                return 0;
+            }
+            if ((*(p+5) == json_char_reverse_solidus) && (*(p+6) == 'u') &&
+                is_hex_char(*(p+7)) && is_hex_char(*(p+8)) &&
+                is_hex_char(*(p+9)) && is_hex_char(*(p+10)))
+            {
+                /* CP 0x10000..0x10FFFF encoded in utf-16 surrogate pair */
+                uint32_t low = get_hex_2byte(p+7);
+                if (is_utf16_low_surrogate_range(low)) {
+                    if (cp) {
+                        i   -= utf16_high_surrogate_start;
+                        low -= utf16_low_surrogate_start;
+                        i = 0x010000 + (i << 10) + low;
+                        *cp = i;
+                    }
+                    return 4;
+                }
+            }
+        }
+        if (is_unicode_reserved_range(i)) {
+            return -1;
+        }
+        if (i > 0xffff)  return -1;
+        /* CodePoint 0..0xD7FF , 0xE000..0xFFFF */
+        if (cp) { *cp = i; }
+        if (i <= 0x7F)   return 1;
+        if (i <= 0x7FF)  return 2;
+        if (i <= 0xFFFF) return 3;
+    }
+    return -1;
+}
+
+/* srcp is looking at 'u' */
+static inline int json_utf8_escaped_expand(uchar **srcp, uchar **dstp,
+                                           uchar *stop)
+{
+    uchar *src = *srcp;
+    uchar *dst = *dstp;
+    uint32_t cp;
+    int slen = 5;
+    int dlen = json_utf8_escaped_width(src, stop, &cp);
+    switch (dlen) {
+    case 4:
+        *(dst+3) = (uchar)((cp & 0x3f) | 0x80); cp >>= 6;
+        *(dst+2) = (uchar)((cp & 0x3f) | 0x80); cp >>= 6;
+        *(dst+1) = (uchar)((cp & 0x3f) | 0x80); cp >>= 6;
+        *(dst+0) = (uchar)((cp & 0x07) | 0xf0);
+        slen = 11;
+        break;
+    case 3:
+        *(dst+2) = (uchar)((cp & 0x3f) | 0x80); cp >>= 6;
+        *(dst+1) = (uchar)((cp & 0x3f) | 0x80); cp >>= 6;
+        *(dst+0) = (uchar)((cp & 0x0f) | 0xe0);
+        break;
+    case 2:
+        *(dst+1) = (uchar)((cp & 0x3f) | 0x80); cp >>= 6;
+        *(dst+0) = (uchar)((cp & 0x1f) | 0xc0);
+        break;
+    case 1:
+        *(dst+0) = (uchar)cp;
+        break;
+    default:
+        /* invalid input ignored */
+        return 0;
+    }
+    /* update pointers */
+    *srcp = src + slen;
+    *dstp = dst + dlen;
+    return 1;
+}
 
 /* Assumption: ptr is pointing to first quote of string */
 static json_result_t json_string(json_state_t *jsp)
@@ -206,24 +340,22 @@ static json_result_t json_string(json_state_t *jsp)
                 sz++;
                 break;
             case 'u':
-                if ((p+5) >= stop) {
-                    /* XXX not if there is an end-quote within those five */
+            {
+                int dlen = json_utf8_escaped_width(p, stop, NULL);
+                if ((dlen == 0) &&
+                    (memchr(p, json_char_quotation_mark, stop-p) == NULL))
+                {
                     return json_result_error_on_eof(jsp);
                 }
-                if (is_hex_char(*(p+1)) && is_hex_char(*(p+2)) &&
-                    is_hex_char(*(p+3)) && is_hex_char(*(p+4)))
-                {
+                if (dlen > 0) {
                     need_escape = 1;
-                    if ((*(p+1) == '0') && (*(p+2) == '0')) {
-                        sz += 1;
-                    } else {
-                        sz += 2;
-                    }
-                    p += 5;
+                    sz += dlen;
+                    p += (dlen == 4) ? 11 : 5;
                 } else {
-                    sz++;
+                    sz++;  /* ignore (copy) invalid escape sequence */
                 }
                 break;
+            }
             default:
                 sz++;
             }
@@ -261,20 +393,10 @@ static json_result_t json_string(json_state_t *jsp)
                 case 'r': { *dst++ = 0x0d; src++; break; }
                 case 't': { *dst++ = 0x09; src++; break; }
                 case 'u':
-                    if (is_hex_char(*(src+1)) && is_hex_char(*(src+2)) &&
-                        is_hex_char(*(src+3)) && is_hex_char(*(src+4)))
-                    {
-                        src++;
-                        *dst = get_hex_byte(src);
-                        if (*dst)
-                            dst++;
-                        src+=2;
-                        *dst++ = get_hex_byte(src);
-                        src+=2;
-                    } else {
-                        *dst++ = json_char_reverse_solidus;
+                    if (json_utf8_escaped_expand(&src, &dst, stop)) {
+                        break;
                     }
-                    break;
+                    /* fall-through */
                 default:
                     *dst++ = json_char_reverse_solidus;
                 }
@@ -522,22 +644,23 @@ need_more:
     return json_result_error_on_eof(jsp);
 }
 
-#define is_unescaped_json_char(C) ( ((C) == 0x20) || ((C) == 0x21) || \
-                                    (((C) >= 0x23) && ((C) <= 0x5b)) || \
-                                    (((C) >= 0x5d) && ((C) <= 0x7e)) )
+
+#define json_must_escape_char(C) ( ((C) <= 0x1f) || \
+                                   ((C) == json_char_quotation_mark) || \
+                                   ((C) == json_char_reverse_solidus) )
 
 int json_string_escape_size(uchar *start, size_t size, size_t *newsize)
 {
-    int needs_escape = 0;
+    int need_escape = 0;
     uchar *p, *stop = start + size;
 
     for (p = start; p < stop; p++) {
-        if (!is_unescaped_json_char(*p)) {
-            needs_escape = 1;
+        if (json_must_escape_char(*p)) {
+            need_escape = 1;
             break;
         }
     }
-    if (needs_escape) {
+    if (need_escape) {
         size_t sz = p - start;
         for (; p < stop; sz++,p++) {
             switch (*p) {
@@ -550,7 +673,10 @@ int json_string_escape_size(uchar *start, size_t size, size_t *newsize)
             case 0x09:
                 sz++;
                 break;
-                /* FIXME UNICODE */
+            default:
+                if (json_must_escape_char(*p)) {
+                    sz += 5;
+                }
             }
         }
         *newsize = sz;
@@ -561,8 +687,18 @@ int json_string_escape_size(uchar *start, size_t size, size_t *newsize)
     }
 }
 
+static inline uchar hex_char(int c)
+{
+    c &= 0xf;
+    if (c < 10) { return '0' + c; }
+    return 'A' + (c - 10);
+}
+
 int json_string_escape(uchar *src, size_t size, uchar *dst, size_t dst_size)
 {
+#if 0
+    uchar *dbg_src = src, *dbg_dst = dst;
+#endif
     uchar *stop = src + size;
     for (; src<stop; src++,dst++) {
         switch (*src) {
@@ -573,10 +709,39 @@ int json_string_escape(uchar *src, size_t size, uchar *dst, size_t dst_size)
         case 0x0A: *dst++ = json_char_reverse_solidus; *dst = 'n'; break;
         case 0x0D: *dst++ = json_char_reverse_solidus; *dst = 'r'; break;
         case 0x09: *dst++ = json_char_reverse_solidus; *dst = 't'; break;
-            /* FIXME UNICODE */
         default:
-            *dst = *src;
+            if (json_must_escape_char(*src)) {
+                int c = (int)*src;
+                *dst++ = json_char_reverse_solidus;
+                *dst++ = 'u';
+                *dst++ = '0';
+                *dst++ = '0';
+                *dst++ = hex_char(c >> 4);
+                *dst = hex_char(c);
+            } else {
+                *dst = *src;
+            }
         }
     }
+#if 0
+    {
+        char dbg_src_str[size+1];
+        char dbg_dst_str[dst_size+1];
+        int i; uchar *p;
+        for (i=0,p=dbg_src; i<size; i++,p++) {
+            if (isprint(*p)) { dbg_src_str[i] = *p; }
+            else { dbg_src_str[i] = '.'; }
+        }
+        dbg_src_str[i] = 0;
+        for (i=0,p=dbg_dst; i<dst_size; i++,p++) {
+            if (isprint(*p)) { dbg_dst_str[i] = *p; }
+            else { dbg_dst_str[i] = '.'; }
+        }
+        dbg_dst_str[i] = 0;
+        fprintf(stderr, "src|%s|%d(%d) dst|%s|%d(%d)\n\r",
+                dbg_src_str, (int)size, (int)(src-dbg_src-size),
+                dbg_dst_str, (int)dst_size, (int)(dst-dbg_dst-dst_size));
+    }
+#endif
     return 1;
 }
