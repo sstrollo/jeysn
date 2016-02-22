@@ -143,9 +143,9 @@ static ERL_NIF_TERM make_position(ErlNifEnv* env, ejson_state_t *ejs)
         enif_make_new_binary(env, 0, &buf2);
     }
     ERL_NIF_TERM pos =
-        enif_make_tuple3(env, enif_make_uint(env, ejs->js.pos.pos),
-                         enif_make_uint(env, ejs->js.pos.line),
-                         enif_make_uint(env, ejs->js.pos.col));
+        enif_make_tuple3(env, enif_make_uint(env, ejs->js.position.offset),
+                         enif_make_uint(env, ejs->js.position.line),
+                         enif_make_uint(env, ejs->js.position.column));
     return enif_make_tuple3(env, pos, buf1, buf2);
 }
 
@@ -274,6 +274,19 @@ get_position(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
     return make_position(env, ejs);
 }
 
+static ERL_NIF_TERM
+get_token_position(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    ejson_state_t *ejs = NULL;
+    if (!get_ejson_state_t(env, argv[0], &ejs)) {
+        return enif_make_badarg(env);
+    }
+    return enif_make_tuple3(env,
+                            enif_make_uint(env, ejs->js.token.position.offset),
+                            enif_make_uint(env, ejs->js.token.position.line),
+                            enif_make_uint(env, ejs->js.token.position.column));
+}
+
 static ERL_NIF_TERM debug(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
     ERL_NIF_TERM buf1, buf2;
@@ -291,9 +304,9 @@ static ERL_NIF_TERM debug(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
         buf2 = enif_make_list(env, 0);
     }
     ERL_NIF_TERM pos =
-        enif_make_tuple3(env, enif_make_uint(env, ejs->js.pos.pos),
-                         enif_make_uint(env, ejs->js.pos.line),
-                         enif_make_uint(env, ejs->js.pos.col));
+        enif_make_tuple3(env, enif_make_uint(env, ejs->js.position.offset),
+                         enif_make_uint(env, ejs->js.position.line),
+                         enif_make_uint(env, ejs->js.position.column));
     return enif_make_tuple3(env, pos, buf1, buf2);
 }
 
@@ -410,6 +423,7 @@ static ErlNifFunc nif_funcs[] = {
     , {"next_token_nif", 2, next_token}
     , {"data", 2, data}
     , {"get_position", 1, get_position}
+    , {"get_token_position", 1, get_token_position}
     , {"debug", 1, debug}
     , {"escape_string", 1, escape_string}
 };

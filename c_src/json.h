@@ -63,6 +63,12 @@ typedef enum json_error {
     json_error_eof              /* eof while scanning token */
 } json_error_t;
 
+struct json_position {
+    size_t offset;
+    size_t line;
+    size_t column;
+};
+
 typedef struct json_token {
     json_token_type_t type;
     union {
@@ -79,6 +85,7 @@ typedef struct json_token {
         uint64_t number_unsigned;
         double   number_double;
     } value;
+    struct json_position position;
 } json_token_t;
 
 
@@ -90,15 +97,9 @@ struct json_buffer {
     // struct json_buffer *next;
 };
 
-struct json_pos {
-    size_t pos;
-    size_t line;
-    size_t col;
-};
-
 typedef struct json_state {
     int eof;
-    struct json_pos pos;
+    struct json_position position;
     struct json_buffer buf;
     json_token_t token;
     void *(*alloc)(size_t size);

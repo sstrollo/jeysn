@@ -29,16 +29,16 @@
 static void update_position(json_state_t *jsp, uchar *newpos)
 {
     size_t count = newpos - jsp->buf.ptr;
-    jsp->pos.pos += count;
-    jsp->pos.col += count;
-    jsp->buf.ptr = newpos;
+    jsp->position.offset += count;
+    jsp->position.column += count;
+    jsp->buf.ptr     = newpos;
 }
 
 static void nl(json_state_t *jsp)
 {
-    jsp->pos.pos += 1;
-    jsp->pos.line += 1;
-    jsp->pos.col = 0;
+    jsp->position.offset += 1;
+    jsp->position.line   += 1;
+    jsp->position.column  = 0;
 }
 
 static json_result_t json_result_error_on_eof(json_state_t *jsp)
@@ -59,6 +59,7 @@ void json_state_init(json_state_t *jsp, void *(*alloc)(size_t size),
     memset(jsp, 0, sizeof(*jsp));
     jsp->alloc = alloc;
     jsp->free = free;
+    jsp->position.line = 1;
     return;
 }
 
@@ -561,6 +562,8 @@ json_result_t json_next_token(json_state_t *jsp)
             return json_result_more;
         }
     }
+    update_position(jsp, p);
+    jtok->position = jsp->position;
     switch (*p) {
     case json_char_begin_array:
         jtok->type = json_token_begin_array;

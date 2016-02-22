@@ -11,7 +11,8 @@
 -module(ejson).
 
 -export([init/0, init/1, init_string/1, init_string/2]).
--export([data/2, eof/1, get_position/1, next_token/1, next_token/2]).
+-export([data/2, eof/1]).
+-export([get_position/1, get_token_position/1, next_token/1, next_token/2]).
 
 -export([encode_string/1, escape_string/1]).
 
@@ -104,12 +105,17 @@ string_format_internal('string')        -> 1;
 string_format_internal('atom')          -> 2;
 string_format_internal('existing_atom') -> 3.
 
--type position() :: {{Pos    :: non_neg_integer(),
-                      Line   :: non_neg_integer(),
-                      Column :: non_neg_integer()},
-                     Before::binary(), After::binary()}.
--spec get_position(ejson_tokenizer()) -> position().
+-type position() :: {Offset :: non_neg_integer(),
+                     Line   :: non_neg_integer(),
+                     Column :: non_neg_integer()}.
+
+-spec get_position(ejson_tokenizer()) ->
+                          {position(), Before::binary(), After::binary()}.
 get_position(_State) ->
+    nif_only().
+
+-spec get_token_position(ejson_tokenizer()) -> position().
+get_token_position(_State) ->
     nif_only().
 
 debug(_x) ->
@@ -176,19 +182,23 @@ tokenize(S, Tokens, {error, Err}) ->
 tokenize(S, Tokens, Token) ->
     tokenize(S, [Token|Tokens], next_token(S, {atom,$:})).
 
+%% ------------------------------------------------------------------------
 
 json2_decode(Str) ->
     S = init_string(Str),
     json2_decode_value(S, next_token(S, string)).
 
 json2_decode_file(FileName) ->
-    BufSz = 16,
+    BufSz = 8192,
     {ok, Fd} = file:open(FileName, [read,binary,raw]),
     F = fun () -> file:read(Fd, BufSz) end,
-    json2_decode_stream(F).
+    json2_decode_named_stream(F, FileName).
 
 json2_decode_stream(ReadFun) ->
-    json2_decode_value({init(), ReadFun}).
+    json2_decode_value({init(), "-", ReadFun}).
+
+json2_decode_named_stream(ReadFun, Name) ->
+    json2_decode_value({init(), Name, ReadFun}).
 
 json2_decode_value(S) ->
     json2_decode_value(S, json2_decode_next(S)).
@@ -202,7 +212,8 @@ json2_decode_value(S, Token) ->
         {string, Str} -> Str;
         '{' -> json2_decode_object(S);
         '[' -> json2_decode_array(S);
-        N when is_number(N) -> N
+        N when is_number(N) -> N;
+        Other -> json2_decode_error(S, Other, [value])
     end.
 
 %% looking-for: member/end-object
@@ -218,15 +229,21 @@ json2_decode_object_member(S, {string, Key}, Members) ->
     case json2_decode_next(S) of
         ':' ->
             Value = json2_decode_value(S),
-            json2_decode_object_next(S, [{Key, Value}|Members])
-    end.
+            json2_decode_object_next(S, [{Key, Value}|Members]);
+        Other ->
+            json2_decode_error(S, Other, [':'])
+    end;
+json2_decode_object_member(S, Other, _Members) ->
+    json2_decode_error(S, Other, [string]).
 
 json2_decode_object_next(S, Members) ->
     case json2_decode_next(S) of
         '}' ->
             {struct, lists:reverse(Members)};
         ',' ->
-            json2_decode_object_member(S, json2_decode_next(S), Members)
+            json2_decode_object_member(S, json2_decode_next(S), Members);
+        Other ->
+            json2_decode_error(S, Other, ['}', ','])
     end.
 
 json2_decode_array(S) ->
@@ -244,19 +261,34 @@ json2_decode_array_next(S, Array) ->
             {array, lists:reverse(Array)};
         ',' ->
             Value = json2_decode_value(S),
-            json2_decode_array_next(S, [Value|Array])
+            json2_decode_array_next(S, [Value|Array]);
+        Other ->
+            json2_decode_error(S, Other, [']', ','])
     end.
 
-json2_decode_next({S, ReadF}) ->
+json2_decode_next({S, _, ReadF} = State) ->
     case next_token(S, string) of
         more ->
             file_data(S, ReadF()),
-            json2_decode_next({S, ReadF});
+            json2_decode_next(State);
         Token ->
             Token
     end;
 json2_decode_next(S) ->
     next_token(S, string).
+
+json2_decode_error(S, Got, Expected) ->
+    {File, Line, Col} = json2_get_position(S),
+    io:format("~s:~w:~w: Error: got ~s expected: ~w\n",
+              [File, Line, Col, Got, Expected]),
+    erlang:error(syntax).
+
+json2_get_position({S, File, _}) ->
+    {_, Line, Col} = get_token_position(S),
+    {File, Line, Col};
+json2_get_position(S) ->
+    {_, Line, Col} = get_token_position(S),
+    {"-", Line, Col}.
 
 
 %% ------------------------------------------------------------------------
