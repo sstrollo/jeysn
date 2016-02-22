@@ -17,7 +17,8 @@
 
 %% tests
 -export([debug/1]).
--export([file/1, tokenize/1, xxx/1, xxxf/1, xxxrf/1]).
+-export([file/1, tokenize/1]).
+-export([json2_decode/1, json2_decode_file/1, json2_decode_stream/1]).
 
 -on_load(nif_load/0).
 
@@ -176,85 +177,85 @@ tokenize(S, Tokens, Token) ->
     tokenize(S, [Token|Tokens], next_token(S, {atom,$:})).
 
 
-xxx(Str) ->
+json2_decode(Str) ->
     S = init_string(Str),
-    xxx_value(S, next_token(S, string)).
+    json2_decode_value(S, next_token(S, string)).
 
-xxxf(FileName) ->
+json2_decode_file(FileName) ->
     BufSz = 16,
     {ok, Fd} = file:open(FileName, [read,binary,raw]),
     F = fun () -> file:read(Fd, BufSz) end,
-    xxxrf(F).
+    json2_decode_stream(F).
 
-xxxrf(ReadFun) ->
-    xxx_value({init(), ReadFun}).
+json2_decode_stream(ReadFun) ->
+    json2_decode_value({init(), ReadFun}).
 
-xxx_value(S) ->
-    xxx_value(S, xxx_next(S)).
+json2_decode_value(S) ->
+    json2_decode_value(S, json2_decode_next(S)).
 
 %% looking-for: false/null/true/number/string/begin-array/begin-object
-xxx_value(S, Token) ->
+json2_decode_value(S, Token) ->
     case Token of
         false -> false;
         null -> null;
         true -> true;
         {string, Str} -> Str;
-        '{' -> xxx_object(S);
-        '[' -> xxx_array(S);
+        '{' -> json2_decode_object(S);
+        '[' -> json2_decode_array(S);
         N when is_number(N) -> N
     end.
 
 %% looking-for: member/end-object
-xxx_object(S) ->
-    case xxx_next(S) of
+json2_decode_object(S) ->
+    case json2_decode_next(S) of
         '}' ->
             {struct, []};
         Token ->
-            xxx_object_member(S, Token, [])
+            json2_decode_object_member(S, Token, [])
     end.
 
-xxx_object_member(S, {string, Key}, Members) ->
-    case xxx_next(S) of
+json2_decode_object_member(S, {string, Key}, Members) ->
+    case json2_decode_next(S) of
         ':' ->
-            Value = xxx_value(S),
-            xxx_object_next(S, [{Key, Value}|Members])
+            Value = json2_decode_value(S),
+            json2_decode_object_next(S, [{Key, Value}|Members])
     end.
 
-xxx_object_next(S, Members) ->
-    case xxx_next(S) of
+json2_decode_object_next(S, Members) ->
+    case json2_decode_next(S) of
         '}' ->
             {struct, lists:reverse(Members)};
         ',' ->
-            xxx_object_member(S, xxx_next(S), Members)
+            json2_decode_object_member(S, json2_decode_next(S), Members)
     end.
 
-xxx_array(S) ->
-    case xxx_next(S) of
+json2_decode_array(S) ->
+    case json2_decode_next(S) of
         ']' ->
             {array, []};
         Token ->
-            Value = xxx_value(S, Token),
-            xxx_array_next(S, [Value])
+            Value = json2_decode_value(S, Token),
+            json2_decode_array_next(S, [Value])
     end.
 
-xxx_array_next(S, Array) ->
-    case xxx_next(S) of
+json2_decode_array_next(S, Array) ->
+    case json2_decode_next(S) of
         ']' ->
             {array, lists:reverse(Array)};
         ',' ->
-            Value = xxx_value(S),
-            xxx_array_next(S, [Value|Array])
+            Value = json2_decode_value(S),
+            json2_decode_array_next(S, [Value|Array])
     end.
 
-xxx_next({S, ReadF}) ->
+json2_decode_next({S, ReadF}) ->
     case next_token(S, string) of
         more ->
             file_data(S, ReadF()),
-            xxx_next({S, ReadF});
+            json2_decode_next({S, ReadF});
         Token ->
             Token
     end;
-xxx_next(S) ->
+json2_decode_next(S) ->
     next_token(S, string).
 
 

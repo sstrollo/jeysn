@@ -132,8 +132,8 @@ prop_skip_invalid_escape_sequence() ->
             begin
                 String = lists:flatten([Pre,Seq,Post]),
                 JSON_Value = [$", String, $"],
-%%                io:format("\n~w ~w\n", [String, ejson:xxx(JSON_Value)]),
-                String == ejson:xxx(JSON_Value)
+%%             io:format("\n~w ~w\n", [String, ejson:json2_decode(JSON_Value)]),
+                String == ejson:json2_decode(JSON_Value)
             end).
 
 prop_skip_invalid_escape_u_sequence() ->
@@ -144,8 +144,8 @@ prop_skip_invalid_escape_u_sequence() ->
             begin
                 String = lists:flatten([Pre,Seq,Post]),
                 JSON_Value = [$", String, $"],
-%%                io:format("\n~w ~w\n", [String, ejson:xxx(JSON_Value)]),
-                String == ejson:xxx(JSON_Value)
+%%             io:format("\n~w ~w\n", [String, ejson:json2_decode(JSON_Value)]),
+                String == ejson:json2_decode(JSON_Value)
             end).
 
 %%-type json_ws_char() :: 16#20 | 16#09 | 16#0a | 16#0d.
@@ -158,7 +158,7 @@ prop_decode() ->
             begin
                 Str = encode_value(V),
 %%                io:format("\n\n~s\n\n", [Str]),
-                ejson:xxx(Str) == V
+                ejson:json2_decode(Str) == V
             end).
 
 prop_decode_ws() ->
@@ -168,7 +168,7 @@ prop_decode_ws() ->
                 Str = encode_value(V, WS),
 %%                io:format("\n\n~s\n\n", [Str]),
 %%                io:format("\n~w\n", [Space]),
-                ejson:xxx(Str) == V
+                ejson:json2_decode(Str) == V
             end).
 
 test_str() ->
@@ -177,7 +177,7 @@ test_str() ->
 prop_test() ->
     ?FORALL(Str, test_str(),
             begin
-                _Term = ejson:xxx(Str),
+                _Term = ejson:json2_decode(Str),
 %%                io:format("\n\nStr: ~s\nTerm: ~9999p\n\n", [Str, _Term]),
                 true
             end).
@@ -215,7 +215,7 @@ chopped(String, ChunkSize) ->
                 end
         end,
     try
-        ejson:xxxrf(ReadF)
+        ejson:json2_decode_stream(ReadF)
     after
         erase(Ref)
     end.
