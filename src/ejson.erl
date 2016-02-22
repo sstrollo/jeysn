@@ -262,12 +262,20 @@ json2_decode_next(S) ->
 %% ------------------------------------------------------------------------
 
 nif_load() ->
-    case code:priv_dir(eparse) of
-        {error,_} ->
-            erlang:load_nif(filename:append("../priv", "ejson_nif"), 0);
-        PrivDir ->
-            erlang:load_nif(filename:append(PrivDir, "ejson_nif"), 0)
-    end.
+    Dir =
+        %% ../priv only works in test or src
+        case application:get_application(?MODULE) of
+            undefined ->
+                "../priv";
+            {ok, Application} ->
+                case code:priv_dir(Application) of
+                    {error,_} ->
+                        "../priv";
+                    PrivDir ->
+                        PrivDir
+                end
+        end,
+    erlang:load_nif(filename:append(Dir, "ejson_nif"), 0).
 
 nif_only() ->
     erlang:nif_error(not_loaded).

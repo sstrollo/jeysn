@@ -58,5 +58,5 @@ proper: all test/ejson_prop_test.beam
 test/ejson_prop_test.beam: test/ejson_prop_test.erl
 	$(ERLC) -I$(PROPER)/include -pz $(PROPER)/ebin -o $(dir $@) $<
 
-p: all ejson_prop_test.beam
-	$(ERL) -pz $(PROPER)/ebin
+erl: all
+	env ERL_LIBS=`pwd`:$(PROPER) $(ERL)

@@ -24,6 +24,7 @@ static ERL_NIF_TERM am_ok;
 
 
 typedef struct ejson_state {
+    ErlNifPid owner;       /* pid of the owning process */
     int string_format;     /* 0 binary, 1 string, 2 atom, 3 existing atom */
     int string_split;      /* -1 or 0..127 */
     json_state_t js;
@@ -158,6 +159,25 @@ static void destroy_state(ErlNifEnv *env, void *obj)
     return;
 }
 
+static inline int get_ejson_state_t(ErlNifEnv *env, ERL_NIF_TERM arg,
+                                    ejson_state_t **ejs)
+{
+    ErlNifPid pid;
+    if (!enif_get_resource(env, arg, ejson_state_type, (void **)ejs)) {
+        return 0;
+    }
+    memset(&pid, 0, sizeof(pid));
+    enif_self(env, &pid);
+    /* Ensure resource is only used by one (owning) process (easier
+     * than adding mutex around every call). Note: the nif library
+     * should have a way of comparing two ErlNifPid objects. */
+    if (memcmp(&pid, &(*ejs)->owner, sizeof(pid)) != 0) {
+        return 0;
+    }
+    return 1;
+}
+
+
 static int get_string_format_arg(ErlNifEnv* env, ERL_NIF_TERM arg,
                                  int *string_format, int *string_split)
 {
@@ -186,7 +206,7 @@ static ERL_NIF_TERM next_token(ErlNifEnv* env,
 {
     ejson_state_t *ejs = NULL;
     int string_format = -1, string_split = -2;
-    if (!enif_get_resource(env, argv[0], ejson_state_type, (void **)&ejs)) {
+    if (!get_ejson_state_t(env, argv[0], &ejs)) {
         return enif_make_badarg(env);
     }
     if ((argc == 2) &&
@@ -223,7 +243,7 @@ static ERL_NIF_TERM data(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
     ejson_state_t *ejs = NULL;
     ErlNifBinary bin;
-    if (!enif_get_resource(env, argv[0], ejson_state_type, (void **)&ejs)) {
+    if (!get_ejson_state_t(env, argv[0], &ejs)) {
         return enif_make_badarg(env);
     }
     if (enif_is_atom(env, argv[1]) && (enif_compare(am_eof, argv[1]) == 0)) {
@@ -248,7 +268,7 @@ static ERL_NIF_TERM
 get_position(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
     ejson_state_t *ejs = NULL;
-    if (!enif_get_resource(env, argv[0], ejson_state_type, (void **)&ejs)) {
+    if (!get_ejson_state_t(env, argv[0], &ejs)) {
         return enif_make_badarg(env);
     }
     return make_position(env, ejs);
@@ -258,7 +278,7 @@ static ERL_NIF_TERM debug(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
     ERL_NIF_TERM buf1, buf2;
     ejson_state_t *ejs = NULL;
-    if (!enif_get_resource(env, argv[0], ejson_state_type, (void **)&ejs)) {
+    if (!get_ejson_state_t(env, argv[0], &ejs)) {
         return enif_make_badarg(env);
     }
     if (ejs->js.buf.buf) {
@@ -287,6 +307,7 @@ static ERL_NIF_TERM init(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
     json_state_init(&ejs->js, enif_alloc, enif_free);
     ejs->string_format = 0;
     ejs->string_split = -1;
+    enif_self(env, &ejs->owner);
 
     if ((argc > 0) &&
         enif_is_list(env, argv[0]) && !enif_is_empty_list(env, argv[0]))
