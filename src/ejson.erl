@@ -111,15 +111,22 @@ string_format_internal('existing_atom') -> 3.
 
 -spec get_position(ejson_tokenizer()) ->
                           {position(), Before::binary(), After::binary()}.
+%% @doc Return the current position of the tokenizer.
 get_position(_State) ->
     nif_only().
 
 -spec get_token_position(ejson_tokenizer()) -> position().
+%% @doc Return the position of the latest returned token.
 get_token_position(_State) ->
     nif_only().
 
 debug(_x) ->
     ok.
+
+%% format_json_error(#json_error{} = Err) ->
+%%     ErrStr = json_error_code_to_string(Err),
+%%     io_lib:format("~s:~w:~w: ~s: ~s",
+%%                   [Err#json_error.
 
 %% ------------------------------------------------------------------------
 
