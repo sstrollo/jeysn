@@ -1,16 +1,23 @@
 
-PREFIX = /opt/local
+ERL_PREFIX = /opt/local
+
+ERL  = $(ERL_PREFIX)/bin/erl
+ERLC = $(ERL_PREFIX)/bin/erlc
+ERTS_INCLUDE = $(wildcard $(ERL_PREFIX)/lib/erlang/erts-*/include)
 
 
-ERL  = $(PREFIX)/bin/erl
-ERLC = $(PREFIX)/bin/erlc
-ERL_INCLUDE = $(wildcard $(PREFIX)/lib/erlang/erts-*/include)
-
-
-all:
+all: .tup tup.config
 	tup
 
 make: build
+
+.tup:
+	tup init
+
+tup.config: econfig Makefile
+	env EXPAT_PREFIX=`cd ../expat/install ; pwd` \
+	    PROPER=`cd ../proper ; pwd` \
+	    escript $< > $@
 
 build: priv/ejson_nif.so ebin/ejson.beam test/jtest
 
@@ -23,7 +30,7 @@ test/%.beam: test/%.erl
 	$(ERLC) -o $(dir $@) $<
 
 c_src/%.o: c_src/%.c
-	$(CC) -g -Wall -fPIC -fno-common -I$(ERL_INCLUDE) -c $< -o $@
+	$(CC) -g -Wall -fPIC -fno-common -I$(ERTS_INCLUDE) -c $< -o $@
 
 priv/eparse_nif.so: c_src/eparse.o c_src/json.o
 	$(CC) -bundle -undefined dynamic_lookup -o $@ $^
@@ -41,8 +48,13 @@ priv/ejson_nif.so: c_src/ejson.o c_src/json.o
 	$(CC) -bundle -undefined dynamic_lookup -o $@ $^
 
 clean:
+	rm -f tup.config build*.sh
 	rm -f priv/*.so ebin/*.beam c_src/*.o
-	rm -f test/*.beam test/*.o test/jtest
+	: # awk '/^\// { print "test" $$0; }' test/.gitignore | xargs rm -f
+	rm -f test/*.beam test/*.o test/jtest test/expat_test
+
+build.%.sh: tup.%.config
+	tup generate --config $< $@
 
 
 test: all test/ejson_test.beam

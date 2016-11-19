@@ -1,23 +1,20 @@
 
-# FIXME configurables
-ERL_PREFIX = /opt/local
-PROPER = /Users/seb/Desktop/src/proper
-
+# Erlang needs HOME to be set
 export HOME
 
-ERL  = $(ERL_PREFIX)/bin/erl
-ERLC = $(ERL_PREFIX)/bin/erlc
+ERL          = @(ERL)
+ERLC         = @(ERLC)
+ERTS_INCLUDE = @(ERTS_DIR)/include
+
+PROPER       = @(PROPER)
+
+
+
 
 !erlc = |> ^ erlc %f^ $(ERLC) $(ERLC_FLAGS) %f |> %B.beam
 
 
-## FIXME expand erts-*
-ERL_INCLUDE = $(ERL_PREFIX)/lib/erlang/erts-7.1/include
-
-
-
-
-NIF_INCLUDE = -I$(ERL_INCLUDE)
+NIF_INCLUDE = -I$(ERTS_INCLUDE)
 
 CFLAGS += -Wall -g
 
