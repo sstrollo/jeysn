@@ -82,7 +82,7 @@ eof(State) ->
 -type string_format_type() :: 'binary' | 'string' | 'atom' | 'existing_atom'.
 -spec next_token(ejson_tokenizer(), string_format()) ->
                         json_token() |
-                        {'error', term(), position()} |
+                        {'error', json_token()|'error', position()} |
                         more |
                         eof.
 next_token(State, StringFormat) ->
