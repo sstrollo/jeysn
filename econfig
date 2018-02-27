@@ -10,7 +10,6 @@ main(_Args) ->
     io:format("CONFIG_ERL=~p\n", [ERL]),
     io:format("CONFIG_ERLC=~p\n", [ERLC]),
     io:format("CONFIG_ERTS_DIR=~p\n", [ERTS_DIR]),
-    print_from_env("EXPAT_PREFIX", "/opt/local"),
     print_from_env("PROPER"),
     ok.
 
@@ -18,17 +17,6 @@ erts_dir() ->
     application:start(erts),
     {ok, ErtsVsn} = application:get_key(erts, vsn),
     filename:join(code:root_dir(), ["erts-", ErtsVsn]).
-
-print_from_env(Name, Default) ->
-    io:format("CONFIG_~s=~p\n", [Name, from_env(Name, Default)]).
-
-from_env(Name, Default) ->
-    case os:getenv(Name) of
-        false ->
-            Default;
-        Value ->
-            Value
-    end.
 
 print_from_env(Name) ->
     io:format("CONFIG_~s=~p\n", [Name, from_env_required(Name)]).

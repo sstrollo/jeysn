@@ -3,7 +3,7 @@
 -include_lib("proper/include/proper.hrl").
 
 test() ->
-    case proper:module(?MODULE, [{numtests,2000}]) of
+    case proper:module(?MODULE, [{numtests,5000}]) of
         [] ->
             erlang:halt(0);
         Res ->

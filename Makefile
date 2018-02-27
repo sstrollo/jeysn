@@ -5,6 +5,8 @@ ERL  = $(ERL_PREFIX)/bin/erl
 ERLC = $(ERL_PREFIX)/bin/erlc
 ERTS_INCLUDE = $(wildcard $(ERL_PREFIX)/lib/erlang/erts-*/include)
 
+PROPER = $(shell pwd)/../../proper
+
 
 all: .tup tup.config
 	tup
@@ -15,9 +17,7 @@ make: build
 	tup init
 
 tup.config: econfig Makefile
-	env EXPAT_PREFIX=`cd ../expat/install ; pwd` \
-	    PROPER=`cd ../proper ; pwd` \
-	    escript $< > $@
+	env PROPER=$(PROPER) escript $< > $@
 
 build: priv/ejson_nif.so ebin/ejson.beam test/jtest
 
@@ -51,7 +51,7 @@ clean:
 	rm -f tup.config build*.sh
 	rm -f priv/*.so ebin/*.beam c_src/*.o
 	: # awk '/^\// { print "test" $$0; }' test/.gitignore | xargs rm -f
-	rm -f test/*.beam test/*.o test/jtest test/expat_test
+	rm -f test/*.beam test/*.o test/jtest
 
 build.%.sh: tup.%.config
 	tup generate --config $< $@
@@ -60,8 +60,6 @@ build.%.sh: tup.%.config
 test: all test/ejson_test.beam
 	cd test && $(ERL) -pa ../ebin -noshell -s ejson_test test
 
-
-PROPER = $(shell pwd)/../proper
 
 proper: all test/ejson_prop_test.beam
 	cd test && \

@@ -3,6 +3,4 @@ include_rules
 : json.c  |> !cc_shared |>
 : ejson.c |> !cc_nif    |>
 
-
-
 .gitignore
