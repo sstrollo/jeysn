@@ -2,6 +2,7 @@
 
 -export([decode/1, decode_file/1, decode_stream/1]).
 -export([json2_decode/1, json2_decode_file/1, json2_decode_stream/1]).
+-export([encode/1, encode/2]).
 
 -import(ejson,
         [init/0, init/1, init_string/1, init_string/2,
@@ -233,3 +234,49 @@ file_data(S, {ok, Buf}) ->
 file_data(S, eof) ->
     data(S, eof).
 
+
+%% ------------------------------------------------------------------------
+
+encode(Term) ->
+    encode(Term, []).
+
+encode(false, _) -> <<"false">>;
+encode(null, _) -> <<"null">>;
+encode(true, _) -> <<"true">>;
+encode(N, _) when is_integer(N) -> integer_to_list(N);
+encode(N, _) when is_float(N) -> float_to_list(N);
+
+encode(Object, _) when map_size(Object) =:= 0 ->
+    <<"{}">>;
+encode(Object, X) when is_map(Object) ->
+    [${, encode_sequence(maps:to_list(Object), X), $}];
+encode({Key, Value}, X) ->
+    [encode(Key, X), $:, encode(Value, X)];
+encode(Str, _) when is_atom(Str) ->
+    ejson:encode_string(atom_to_binary(Str, utf8));
+encode(Str, _) when is_binary(Str) ->
+    ejson:encode_string(Str);
+
+encode("", _) ->
+    <<"\"\"">>;
+encode(Item, X) when is_list(Item) ->
+    case is_string(Item) of
+        false ->
+            [$[, encode_sequence(Item, X), $]];
+        true ->
+            ejson:encode_string(Item)
+    end.
+
+encode_sequence([Item], X) ->
+    encode(Item, X);
+encode_sequence([Item|Rest], X) ->
+    [encode(Item, X), $,|encode_sequence(Rest, X)].
+
+is_string([]) ->
+    true;
+is_string([Char|Chars]) when is_integer(Char)
+                             andalso (Char < 127)
+                             andalso (Char > 31) ->
+    is_string(Chars);
+is_string(_) ->
+    false.

@@ -10,6 +10,7 @@ test() ->
         ok = test2c(),
         ok = test3(),
         ok = test_numbers(),
+        ok = test_files(),
         io:format("OK\n", []),
         erlang:halt(0)
     catch
@@ -204,3 +205,26 @@ expect_token(String, Expect) ->
     eof = ejson:next_token(State),
     %%io:format("ok\n", []),
     ok.
+
+test_files() ->
+    JSONFiles = json_files("."),
+    lists:foreach(
+      fun (File) ->
+              Term = sejst:decode_file(File),
+              String = iolist_to_binary(sejst:encode(Term)),
+              Term = sejst:decode(String),
+              ok
+      end, JSONFiles),
+    ok.
+
+json_files(Dir) ->
+    {ok, Files} = file:list_dir(Dir),
+    lists:filter(
+      fun (FileName) ->
+              case lists:reverse(FileName) of
+                  [$n,$o,$s,$j,$.|_] ->
+                      true;
+                  _ ->
+                      false
+              end
+      end, Files).
