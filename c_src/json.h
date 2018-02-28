@@ -75,6 +75,7 @@ typedef enum json_token_type {
 
 typedef enum json_error {
     json_error_invalid_char,    /* unexpected character */
+    json_error_invalid_number,  /* out of range or syntactic error */
     json_error_eof              /* eof while scanning token */
 } json_error_t;
 

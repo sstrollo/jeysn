@@ -72,7 +72,7 @@ eof(State) ->
 
 -type json_token() :: '[' | '{' | '}' | ']' | ':' | ','
                     | 'false' | 'null' | 'true'
-                    | number() | {'number', string()}
+                    | number() | {'number', binary()}
                     | {'string', json_string_representation()}.
 -type json_string_representation() :: json_string_type() |
                                       [json_string_type()|json_string_type()].

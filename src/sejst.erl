@@ -4,13 +4,14 @@
 -export([json2_decode/1, json2_decode_file/1, json2_decode_stream/1]).
 
 -import(ejson,
-        [init/0, init_string/1, next_token/2, data/2, get_token_position/1]).
+        [init/0, init/1, init_string/1, init_string/2,
+         next_token/1, data/2, get_token_position/1]).
 
 %% ------------------------------------------------------------------------
 
 decode(Str) ->
     S = init_string(Str),
-    decode_value(S, next_token(S, string)).
+    decode_value(S, next_token(S)).
 
 decode_file(FileName) ->
     BufSz = 8192,
@@ -37,6 +38,7 @@ decode_value(S, Token) ->
         '{' -> decode_object(S);
         '[' -> decode_array(S);
         N when is_number(N) -> N;
+        {number, IntegerBinary} -> binary_to_integer(IntegerBinary);
         Other -> decode_error(S, Other, [value])
     end.
 
@@ -91,7 +93,7 @@ decode_array_next(S, Array) ->
     end.
 
 decode_next({S, _, ReadF} = State) ->
-    case next_token(S, string) of
+    case next_token(S) of
         more ->
             file_data(S, ReadF()),
             decode_next(State);
@@ -99,11 +101,11 @@ decode_next({S, _, ReadF} = State) ->
             Token
     end;
 decode_next(S) ->
-    next_token(S, string).
+    next_token(S).
 
 decode_error(S, Got, Expected) ->
     {File, Line, Col} = get_position(S),
-    io:format("~s:~w:~w: Error: got ~s expected: ~w\n",
+    io:format("~s:~w:~w: Error: got ~p expected: ~w\n",
               [File, Line, Col, Got, Expected]),
     erlang:error(syntax).
 
@@ -117,8 +119,8 @@ get_position(S) ->
 %% ------------------------------------------------------------------------
 
 json2_decode(Str) ->
-    S = init_string(Str),
-    json2_decode_value(S, next_token(S, string)).
+    S = init_string([{string,string}], Str),
+    json2_decode_value(S, next_token(S)).
 
 json2_decode_file(FileName) ->
     BufSz = 8192,
@@ -127,10 +129,10 @@ json2_decode_file(FileName) ->
     json2_decode_named_stream(F, FileName).
 
 json2_decode_stream(ReadFun) ->
-    json2_decode_value({init(), "-", ReadFun}).
+    json2_decode_value({init([{string,string}]), "-", ReadFun}).
 
 json2_decode_named_stream(ReadFun, Name) ->
-    json2_decode_value({init(), Name, ReadFun}).
+    json2_decode_value({init([{string,string}]), Name, ReadFun}).
 
 json2_decode_value(S) ->
     json2_decode_value(S, json2_decode_next(S)).
@@ -145,6 +147,7 @@ json2_decode_value(S, Token) ->
         '{' -> json2_decode_object(S);
         '[' -> json2_decode_array(S);
         N when is_number(N) -> N;
+        {number, IntegerBinary} -> binary_to_integer(IntegerBinary);
         Other -> json2_decode_error(S, Other, [value])
     end.
 
@@ -199,7 +202,7 @@ json2_decode_array_next(S, Array) ->
     end.
 
 json2_decode_next({S, _, ReadF} = State) ->
-    case next_token(S, string) of
+    case next_token(S) of
         more ->
             file_data(S, ReadF()),
             json2_decode_next(State);
@@ -207,11 +210,11 @@ json2_decode_next({S, _, ReadF} = State) ->
             Token
     end;
 json2_decode_next(S) ->
-    next_token(S, string).
+    next_token(S).
 
 json2_decode_error(S, Got, Expected) ->
     {File, Line, Col} = json2_get_position(S),
-    io:format("~s:~w:~w: Error: got ~s expected: ~w\n",
+    io:format("~s:~w:~w: Error: got ~p expected: ~w\n",
               [File, Line, Col, Got, Expected]),
     erlang:error(syntax).
 
@@ -229,3 +232,4 @@ file_data(S, {ok, Buf}) ->
     data(S, Buf);
 file_data(S, eof) ->
     data(S, eof).
+

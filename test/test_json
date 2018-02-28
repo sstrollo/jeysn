@@ -1,0 +1,57 @@
+#! /usr/bin/env escript                                 # -*- mode: erlang -*-
+
+main([File]) ->
+    init(),
+    try
+        io:format("processing ~s... ", [File]),
+        _Term = sejst:decode_file(File),
+        io:format("ok\n", []),
+        %%io:format("~p\n", [_Term]),
+        halt(0)
+    catch
+        error:syntax ->
+            halt(1);
+        _X:_Y ->
+            io:format("~p:~p\n", [_X, _Y]),
+            halt(2)
+    end;
+
+main(["double", File]) ->
+    init(),
+    try
+        Term = sejst:decode_file(File),
+        io:format("~p\n", [Term]),
+        String = iolist_to_binary(sejst:encode(Term)),
+        io:format("~s\n", [String]),
+        Term = sejst:decode(String),
+        halt(0)
+    catch
+        error:syntax ->
+            halt(1);
+        _X:_Y ->
+            io:format("~p:~p\n", [_X, _Y]),
+            halt(2)
+    end;
+
+main(Files) ->
+    init(),
+    lists:foreach(
+      fun (File) ->
+              io:format("processing ~s... ", [File]),
+              try
+                  _Term = sejst:decode_file(File),
+                  io:format("ok\n", [])
+              catch
+                  _X:_Y ->
+                      io:format("~p:~p\n", [_X, _Y])
+              end
+      end, Files),
+    halt(0).
+
+
+init() ->
+    code:add_path("/Users/seb/Desktop/src/eparse/ejson/ebin"),
+    application:start(ejson),
+    ok.
+
+

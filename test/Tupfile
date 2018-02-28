@@ -4,6 +4,8 @@ CFLAGS += -I../c_src
 
 : jtest.c |> !cc |>
 : ../c_src/json.o jtest.o |> !ld |> jtest
+: jtest2.c |> !cc |>
+: ../c_src/json.o jtest2.o |> !ld |> jtest2
 
 
 : ejson_test.erl |> !erlc |>

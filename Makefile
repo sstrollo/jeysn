@@ -51,7 +51,7 @@ clean:
 	rm -f tup.config build*.sh
 	rm -f priv/*.so ebin/*.beam c_src/*.o
 	: # awk '/^\// { print "test" $$0; }' test/.gitignore | xargs rm -f
-	rm -f test/*.beam test/*.o test/jtest
+	rm -f test/*.beam test/*.o test/jtest test/jtest2
 
 build.%.sh: tup.%.config
 	tup generate --config $< $@

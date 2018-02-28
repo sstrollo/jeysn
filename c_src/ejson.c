@@ -73,8 +73,10 @@ static ERL_NIF_TERM make_json_token(ErlNifEnv *env, ejson_state_t *ejs,
     int splitc = (string_split == -2) ? ejs->string_split : string_split;
     switch (ejs->js.token.type) {
     case json_token_error:
-        /* XXX */
-        return enif_make_copy(env, am_error);
+    {
+        char *errstr = (char *)ejs->js.token.value.error.string;
+        return enif_make_string(env, errstr, ERL_NIF_LATIN1);
+    }
     case json_token_begin_array:
         return enif_make_copy(env, am_json_token_begin_array);
         break;
@@ -113,13 +115,12 @@ static ERL_NIF_TERM make_json_token(ErlNifEnv *env, ejson_state_t *ejs,
         break;
     case json_token_number_string:
     {
+        ERL_NIF_TERM term;
         const char *str = (const char *)ejs->js.token.value.string.string;
         size_t strsz = ejs->js.token.value.string.size;
 //        enif_fprintf(stderr, "NUMBER |%*.s|\n", (int)strsz, str);
-        return enif_make_tuple2(env,
-                                enif_make_copy(env, am_number),
-                                enif_make_string_len(env, str, strsz,
-                                                     ERL_NIF_LATIN1));
+        memcpy(enif_make_new_binary(env, strsz, &term), str, strsz);
+        return enif_make_tuple2(env, enif_make_copy(env, am_number), term);
     }
     case json_token_string:
     {
@@ -234,21 +235,19 @@ static ERL_NIF_TERM next_token(ErlNifEnv* env,
     case json_result_eof:
         return enif_make_copy(env, am_eof);
     case json_result_token:
-    {
-        ERL_NIF_TERM token =
-            make_json_token(env, ejs, string_format, string_split);
+        return make_json_token(env, ejs, string_format, string_split);
+    case json_result_error:
         if (ejs->js.token.type == json_token_error) {
+            ERL_NIF_TERM token =
+                make_json_token(env, ejs, string_format, string_split);
             return enif_make_tuple3(env,
                                     enif_make_copy(env, am_error),
                                     token,
                                     make_position(env, ejs));
         } else {
-            return token;
+            return enif_make_tuple2(env, enif_make_copy(env, am_error),
+                                    enif_make_int(env, -1));
         }
-    }
-    case json_result_error:
-        return enif_make_tuple2(env, enif_make_copy(env, am_error),
-                                enif_make_int(env, -1));
     }
     /* NOT REACHED */
     return enif_make_badarg(env);

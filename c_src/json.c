@@ -28,7 +28,7 @@
 #include <stdint.h>
 
 #include <stdlib.h>
-//#include <errno.h>
+#include <errno.h>
 
 #include "json.h"
 
@@ -472,24 +472,26 @@ static json_result_t json_number(json_state_t *jsp)
     for (un = 0;;) {
         if (p == stop){if (jsp->eof) break; else return json_result_more;}
         if ((*p >= '0') && (*p <= '9')) {
-            uint64_t tmp = 10 * un;
-            if (tmp < un)
-                goto rescan;
-            un = tmp + (*p - '0');
+            uint64_t tmp = (*p - '0');
+            if (un > (UINT64_MAX / 10))
+                goto not_an_integer;
+            un *= 10;
+            if ((UINT64_MAX - un) < tmp)
+                goto not_an_integer;
+            un += tmp;
             p++;
         } else {
-            if (*p == '.') {
-                goto rescan;
+            if ((*p == '.') || (*p == 'e') || (*p == 'E')) {
+                goto not_an_integer;
             } else {
                 break;
             }
         }
     }
     if (is_neg) {
+        if (un > (INT64_MAX - 1))
+            goto not_an_integer;
         in = un;
-        if (in != un) {
-            goto rescan;
-        }
         in = 0 - in;
         jtok->type = json_token_number;
         jtok->value.number = in;
@@ -500,9 +502,11 @@ static json_result_t json_number(json_state_t *jsp)
     update_position(jsp, p);
     return json_result_token;
 
-rescan:
-    /* Continue scanning until end of number. If it seems like a
-     * floating point try strtod() otherwise return it as string.
+not_an_integer:
+    /* The number won't fit as an integer, it is either too big or a
+     * floating point number, so continue scanning until end of
+     * number. If it seems like a floating point try strtod()
+     * otherwise return it as string.
      */
     {
         int is_float = 0;
@@ -514,12 +518,13 @@ rescan:
                 if (is_float) {
                     if ((*p == 'e') || (*p == 'E') ||
                         (*p == '-') || (*p == '+')) {
-                        p++;    /* XXX close enough... */
+                        /* Close enough, errors will be caught by strtod() */
+                        p++;
                     } else {
                         break;
                     }
                 } else {
-                    if (*p == '.') {
+                    if ((*p == '.') || (*p == 'e') || (*p == 'E')) {
                         is_float = 1;
                         p++;
                     } else {
@@ -533,15 +538,22 @@ rescan:
             size_t len = (p - start) + 1;
             char tmp[len];
             char *tmp_end;
+            int err = 0;
             memcpy(tmp, start, len-1);
             tmp[len-1] = 0;
             d = strtod(tmp, &tmp_end);
-//            if (tmp_end == (tmp + (len - 1)) && (errno != ERANGE)) {
+            err = errno;
+            if (tmp_end == (tmp + (len - 1)) && (err != ERANGE)) {
                 jtok->type = json_token_number_double;
                 jtok->value.number_double = d;
                 update_position(jsp, p);
                 return json_result_token;
-//            }
+            } else {
+                jtok->type = json_token_error;
+                jtok->value.error.code = json_error_invalid_number;
+                jtok->value.error.string = "invalid floating point number";
+                return json_result_error;
+            }
         }
         jtok->type = json_token_number_string;
         jtok->value.string.string = start;
@@ -651,7 +663,9 @@ json_result_t json_next_token(json_state_t *jsp)
             return json_number(jsp);
         } else {
             update_position(jsp, p);
-            /* FIXME set error token */
+            jtok->type = json_token_error;
+            jtok->value.error.code = json_error_invalid_char;
+            jtok->value.error.string = "invalid character";
             return json_result_error;
         }
     }

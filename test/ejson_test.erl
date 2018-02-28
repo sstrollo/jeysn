@@ -9,6 +9,7 @@ test() ->
         ok = test2b(),
         ok = test2c(),
         ok = test3(),
+        ok = test_numbers(),
         io:format("OK\n", []),
         erlang:halt(0)
     catch
@@ -140,3 +141,66 @@ tokens(_S, Tokens, {error, Err}) ->
     {error, lists:reverse(Tokens), Err};
 tokens(S, Tokens, Token) ->
     tokens(S, [Token|Tokens], ejson:next_token(S)).
+
+
+
+test_numbers() ->
+    test_integer(max32()),
+    test_integer(max31()),
+    test_integer(max64()),
+    test_integer(max63()),
+    test_number_number(max64()),
+    test_number_number(0 - (max63()-1)),
+    expect_token("1.0e2", 100.0),
+    expect_token("1.0e-2", 0.01),
+    expect_token("-1.0e2", -100.0),
+    expect_token("-1.0e-2", -0.01),
+    expect_token("1e2", 100.0),
+    expect_token("1e-2", 0.01),
+    expect_token("-1e2", -100.0),
+    expect_token("-1e-2", -0.01),
+    ok.
+
+test_integer(N) ->
+    test_number(N - 1),
+    test_number(N),
+    test_number(N+1),
+    test_number(N+2345),
+    test_number(N*10),
+    test_number(N div 10),
+    test_number(0 - (N - 1)),
+    test_number(0 - (N)),
+    test_number(0 - (N+1)),
+    test_number(0 - (N+2345)),
+    test_number(0 - (N*10)),
+    test_number(0 - (N div 10)),
+    ok.
+
+max31() -> 2147483647.
+max32() -> 4294967295.
+max64() -> 18446744073709551615.
+max63() -> 9223372036854775807.
+
+test_number_number(N) ->
+    N = ejson:next_token(ejson:init_string(integer_to_list(N))),
+    ok.
+
+test_number(N) when is_integer(N) ->
+    %% io:format("~p\n", [N]),
+    State = ejson:init_string(integer_to_list(N)),
+    case ejson:next_token(State) of
+        N ->
+            ok;
+        {number, Bin} ->
+            N = binary_to_integer(Bin)
+    end,
+    eof = ejson:next_token(State),
+    ok.
+
+expect_token(String, Expect) ->
+    %%io:format("string: ~999p expecting: ~999p ... ", [String, Expect]),
+    State = ejson:init_string(String),
+    Expect = ejson:next_token(State),
+    eof = ejson:next_token(State),
+    %%io:format("ok\n", []),
+    ok.
