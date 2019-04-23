@@ -11,6 +11,14 @@ test() ->
             erlang:halt(1)
     end.
 
+profile() ->
+    msacc:start(),
+    Res = proper:module(?MODULE, [{numtests,5000}]),
+    msacc:stop(),
+    msacc:print(msacc:stats()),
+    Res.
+
+
 s() ->
     proper:check_specs(ejson).
 

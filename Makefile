@@ -65,6 +65,10 @@ proper: all test/ejson_prop_test.beam
 	cd test && \
 	  $(ERL) -noshell -pa ../ebin -pz $(PROPER)/ebin -s ejson_prop_test test
 
+proper_profile: all test/ejson_prop_test.beam
+	cd test && \
+	  $(ERL) -pa ../ebin -pz $(PROPER)/ebin -s ejson_prop_test profile
+
 test/ejson_prop_test.beam: test/ejson_prop_test.erl
 	$(ERLC) -I$(PROPER)/include -pz $(PROPER)/ebin -o $(dir $@) $<
 
