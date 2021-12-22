@@ -1,2 +1,9 @@
-/.tup
-/tup.config
+*.beam
+*.plt
+*.o
+*.so
+erl_crash.dump
+.rebar3
+rebar3.crashdump
+ebin
+_build

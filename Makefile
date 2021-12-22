@@ -8,20 +8,9 @@ ERTS_INCLUDE = $(wildcard $(ERL_PREFIX)/lib/erlang/erts-*/include)
 PROPER = $(shell pwd)/../../proper
 
 
-all: .tup tup.config
-	tup
+all: priv/ejson_nif.so ebin/ejson.beam test/jtest
 
-make: build
-
-.tup:
-	tup init
-
-tup.config: econfig Makefile
-	env PROPER=$(PROPER) escript $< > $@
-
-build: priv/ejson_nif.so ebin/ejson.beam test/jtest
-
-.PHONY: all make build
+.PHONY: all
 
 ebin/%.beam: src/%.erl
 	$(ERLC) -o $(dir $@) $<
@@ -31,9 +20,6 @@ test/%.beam: test/%.erl
 
 c_src/%.o: c_src/%.c
 	$(CC) -g -Wall -fPIC -fno-common -I$(ERTS_INCLUDE) -c $< -o $@
-
-priv/eparse_nif.so: c_src/eparse.o c_src/json.o
-	$(CC) -bundle -undefined dynamic_lookup -o $@ $^
 
 c_src/json.o: c_src/json.h
 c_src/jtest.o: c_src/json.h
@@ -45,16 +31,12 @@ test/jtest: test/jtest.o c_src/json.o
 	$(CC) -o $@ $^
 
 priv/ejson_nif.so: c_src/ejson.o c_src/json.o
+	@mkdir -p $(dir $@)
 	$(CC) -bundle -undefined dynamic_lookup -o $@ $^
 
 clean:
-	rm -f tup.config build*.sh
 	rm -f priv/*.so ebin/*.beam c_src/*.o
-	: # awk '/^\// { print "test" $$0; }' test/.gitignore | xargs rm -f
 	rm -f test/*.beam test/*.o test/jtest test/jtest2
-
-build.%.sh: tup.%.config
-	tup generate --config $< $@
 
 
 test: all test/ejson_test.beam
