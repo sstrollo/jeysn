@@ -8,7 +8,7 @@
 %%
 %%  https://tools.ietf.org/html/draft-ietf-netmod-yang-json-02
 %%
--module(ejson).
+-module(jeysn_ll).
 
 -export([init/0, init/1, init_string/1, init_string/2]).
 -export([data/2, eof/1]).
@@ -25,17 +25,17 @@
 
 %% ------------------------------------------------------------------------
 
--opaque ejson_tokenizer() :: <<>>.
--export_type([ejson_tokenizer/0]).
+-opaque jeysn_tokenizer() :: <<>>.
+-export_type([jeysn_tokenizer/0]).
 
 -type init_options() :: [init_option()] | init_option().
 -type init_option() :: {'string', string_format()}.
 
--spec init(init_options()) -> ejson_tokenizer().
+-spec init(init_options()) -> jeysn_tokenizer().
 init(Options) ->
     init_nif(init_options(Options)).
 
--spec init() -> ejson_tokenizer().
+-spec init() -> jeysn_tokenizer().
 init() ->
     nif_only().
 
@@ -51,22 +51,22 @@ init_options(Option) ->
 init_nif(_Options) ->
     nif_only().
 
--spec init_string(iodata()) -> ejson_tokenizer().
+-spec init_string(iodata()) -> jeysn_tokenizer().
 init_string(String) ->
     init_string([], String).
 
--spec init_string(init_options(), iodata()) -> ejson_tokenizer().
+-spec init_string(init_options(), iodata()) -> jeysn_tokenizer().
 init_string(Options, String) ->
     S = init(Options),
     data(S, String),
     eof(S),
     S.
 
--spec data(ejson_tokenizer(), iodata()|'eof') -> 'ok'.
+-spec data(jeysn_tokenizer(), iodata()|'eof') -> 'ok'.
 data(_, _Data) ->
     nif_only().
 
--spec eof(ejson_tokenizer()) -> 'ok'.
+-spec eof(jeysn_tokenizer()) -> 'ok'.
 eof(State) ->
     data(State, 'eof').
 
@@ -80,7 +80,7 @@ eof(State) ->
 
 -type string_format() :: string_format_type() | {string_format_type(), 0..127}.
 -type string_format_type() :: 'binary' | 'string' | 'atom' | 'existing_atom'.
--spec next_token(ejson_tokenizer(), string_format()) ->
+-spec next_token(jeysn_tokenizer(), string_format()) ->
                         json_token() |
                         {'error', json_token()|'error', position()} |
                         more |
@@ -109,13 +109,13 @@ string_format_internal('existing_atom') -> 3.
                      Line   :: non_neg_integer(),
                      Column :: non_neg_integer()}.
 
--spec get_position(ejson_tokenizer()) ->
+-spec get_position(jeysn_tokenizer()) ->
                           {position(), Before::binary(), After::binary()}.
 %% @doc Return the current position of the tokenizer.
 get_position(_State) ->
     nif_only().
 
--spec get_token_position(ejson_tokenizer()) -> position().
+-spec get_token_position(jeysn_tokenizer()) -> position().
 %% @doc Return the position of the latest returned token.
 get_token_position(_State) ->
     nif_only().
@@ -314,7 +314,7 @@ nif_load() ->
                         PrivDir
                 end
         end,
-    erlang:load_nif(filename:append(Dir, "ejson_nif"), 0).
+    erlang:load_nif(filename:append(Dir, "jeysn_ll"), 0).
 
 nif_only() ->
     erlang:nif_error(not_loaded).

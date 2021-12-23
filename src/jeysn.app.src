@@ -1,4 +1,4 @@
-{application,ejson,
+{application,jeysn,
  [{description,"Erlang JSON interface"},
   {vsn,"0.1"},
   {modules,[]},

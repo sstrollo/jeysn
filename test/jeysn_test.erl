@@ -1,4 +1,4 @@
--module(ejson_test).
+-module(jeysn_test).
 -compile(export_all).
 
 test() ->
@@ -14,50 +14,50 @@ test() ->
         io:format("OK\n", []),
         erlang:halt(0)
     catch
-        _Err:_What ->
-            io:format("~p: ~p\n~p\n", [_Err, _What, erlang:get_stacktrace()]),
+        _Err:_What:_Stack ->
+            io:format("~p: ~p\n~p\n", [_Err, _What, _Stack]),
             erlang:halt(1)
     end.
 
 %% ------------------------------------------------------------------------
 
 test1() ->
-    T = ejson:init_string("\"a\" \"b\" \"c\" \"x1x2x3\" \"atom\" \"bye\""),
+    T = jeysn_ll:init_string("\"a\" \"b\" \"c\" \"x1x2x3\" \"atom\" \"bye\""),
 
-    {string,"a"} = ejson:next_token(T, string),
+    {string,"a"} = jeysn_ll:next_token(T, string),
 
-    {string,<<"b">>} = ejson:next_token(T, binary),
+    {string,<<"b">>} = jeysn_ll:next_token(T, binary),
 
-    {string,c} = ejson:next_token(T, atom),
+    {string,c} = jeysn_ll:next_token(T, atom),
 
-    {string,<<"x1x2x3">>} = ejson:next_token(T, existing_atom),
+    {string,<<"x1x2x3">>} = jeysn_ll:next_token(T, existing_atom),
 
-    {string,atom} = ejson:next_token(T, existing_atom),
+    {string,atom} = jeysn_ll:next_token(T, existing_atom),
 
-    {string,<<"bye">>} = ejson:next_token(T),
+    {string,<<"bye">>} = jeysn_ll:next_token(T),
 
-    eof = ejson:next_token(T),
+    eof = jeysn_ll:next_token(T),
 
     ok.
 
 
 test1a() ->
-    T = ejson:init_string([{string,string}],
+    T = jeysn_ll:init_string([{string,string}],
                           "\"a\" \"b\" \"c\" \"x1x2x3\" \"atom\" \"bye\""),
 
-    {string,"a"} = ejson:next_token(T, string),
+    {string,"a"} = jeysn_ll:next_token(T, string),
 
-    {string,<<"b">>} = ejson:next_token(T, binary),
+    {string,<<"b">>} = jeysn_ll:next_token(T, binary),
 
-    {string,c} = ejson:next_token(T, atom),
+    {string,c} = jeysn_ll:next_token(T, atom),
 
-    {string,<<"x1x2x3">>} = ejson:next_token(T, existing_atom),
+    {string,<<"x1x2x3">>} = jeysn_ll:next_token(T, existing_atom),
 
-    {string,atom} = ejson:next_token(T, existing_atom),
+    {string,atom} = jeysn_ll:next_token(T, existing_atom),
 
-    {string,"bye"} = ejson:next_token(T),
+    {string,"bye"} = jeysn_ll:next_token(T),
 
-    eof = ejson:next_token(T),
+    eof = jeysn_ll:next_token(T),
 
     ok.
 
@@ -133,15 +133,15 @@ tokens(Buffer) ->
     tokens([], Buffer).
 
 tokens(Opts, Buffer) ->
-    S = ejson:init_string(Opts, Buffer),
-    tokens(S, [], ejson:next_token(S)).
+    S = jeysn_ll:init_string(Opts, Buffer),
+    tokens(S, [], jeysn_ll:next_token(S)).
 
 tokens(_S, Tokens, eof) ->
     lists:reverse(Tokens);
 tokens(_S, Tokens, {error, Err}) ->
     {error, lists:reverse(Tokens), Err};
 tokens(S, Tokens, Token) ->
-    tokens(S, [Token|Tokens], ejson:next_token(S)).
+    tokens(S, [Token|Tokens], jeysn_ll:next_token(S)).
 
 
 
@@ -183,26 +183,26 @@ max64() -> 18446744073709551615.
 max63() -> 9223372036854775807.
 
 test_number_number(N) ->
-    N = ejson:next_token(ejson:init_string(integer_to_list(N))),
+    N = jeysn_ll:next_token(jeysn_ll:init_string(integer_to_list(N))),
     ok.
 
 test_number(N) when is_integer(N) ->
     %% io:format("~p\n", [N]),
-    State = ejson:init_string(integer_to_list(N)),
-    case ejson:next_token(State) of
+    State = jeysn_ll:init_string(integer_to_list(N)),
+    case jeysn_ll:next_token(State) of
         N ->
             ok;
         {number, Bin} ->
             N = binary_to_integer(Bin)
     end,
-    eof = ejson:next_token(State),
+    eof = jeysn_ll:next_token(State),
     ok.
 
 expect_token(String, Expect) ->
     %%io:format("string: ~999p expecting: ~999p ... ", [String, Expect]),
-    State = ejson:init_string(String),
-    Expect = ejson:next_token(State),
-    eof = ejson:next_token(State),
+    State = jeysn_ll:init_string(String),
+    Expect = jeysn_ll:next_token(State),
+    eof = jeysn_ll:next_token(State),
     %%io:format("ok\n", []),
     ok.
 
@@ -210,9 +210,9 @@ test_files() ->
     JSONFiles = json_files("."),
     lists:foreach(
       fun (File) ->
-              Term = sejst:decode_file(File),
-              String = iolist_to_binary(sejst:encode(Term)),
-              Term = sejst:decode(String),
+              Term = jeysn:decode_file(File),
+              String = iolist_to_binary(jeysn:encode(Term)),
+              Term = jeysn:decode(String),
               ok
       end, JSONFiles),
     ok.

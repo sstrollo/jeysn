@@ -1,4 +1,4 @@
--module(ejson_prop_test).
+-module(jeysn_prop_test).
 -compile(export_all).
 -include_lib("proper/include/proper.hrl").
 
@@ -20,7 +20,7 @@ profile() ->
 
 
 s() ->
-    proper:check_specs(ejson).
+    proper:check_specs(jeysn_ll).
 
 -type json_value() :: 'false' | 'null' | 'true' | json_number() |
                       json_string() | json_array() | json_object().
@@ -41,7 +41,7 @@ s() ->
 prop_number() ->
     ?FORALL(Ns, list(json_number()),
             begin
-                T = ejson:init_string([[number_to_string(N),$ ]||N <- Ns]),
+                T = jeysn_ll:init_string([[number_to_string(N),$ ]||N <- Ns]),
                 same_numbers(T, Ns)
             end).
 
@@ -49,9 +49,9 @@ number_to_string(N) when is_integer(N) -> integer_to_list(N);
 number_to_string(N) when is_float(N) -> float_to_list(N).
 
 same_numbers(T, []) ->
-    eof == ejson:next_token(T);
+    eof == jeysn_ll:next_token(T);
 same_numbers(T, [N|Ns]) ->
-    case same_number(N, ejson:next_token(T)) of
+    case same_number(N, jeysn_ll:next_token(T)) of
         true ->
             same_numbers(T, Ns);
         false ->
@@ -88,9 +88,9 @@ verify_escape_u_encoding(X) ->
     Str2 = json_escape_l(X),
     Bin = <<X/utf8,X/utf8>>,
 %%    io:format("\n~s\n", [[Str1,Str2]]),
-    T = ejson:init_string([$", Str1, Str2, $"]),
-    {string, Bin} == ejson:next_token(T)
-        andalso eof == ejson:next_token(T).
+    T = jeysn_ll:init_string([$", Str1, Str2, $"]),
+    {string, Bin} == jeysn_ll:next_token(T)
+        andalso eof == jeysn_ll:next_token(T).
 
 json_escape_u(CodePoint) when CodePoint =< 16#ffff ->
     io_lib:format("\\u~4.16.0B", [CodePoint]);
@@ -140,8 +140,8 @@ prop_skip_invalid_escape_sequence() ->
             begin
                 String = lists:flatten([Pre,Seq,Post]),
                 JSON_Value = [$", String, $"],
-%%             io:format("\n~w ~w\n", [String, ejson:json2_decode(JSON_Value)]),
-                String == ejson:json2_decode(JSON_Value)
+%%             io:format("\n~w ~w\n", [String, jeysn_ll:json2_decode(JSON_Value)]),
+                String == jeysn_ll:json2_decode(JSON_Value)
             end).
 
 prop_skip_invalid_escape_u_sequence() ->
@@ -152,8 +152,8 @@ prop_skip_invalid_escape_u_sequence() ->
             begin
                 String = lists:flatten([Pre,Seq,Post]),
                 JSON_Value = [$", String, $"],
-%%             io:format("\n~w ~w\n", [String, ejson:json2_decode(JSON_Value)]),
-                String == ejson:json2_decode(JSON_Value)
+%%             io:format("\n~w ~w\n", [String, jeysn_ll:json2_decode(JSON_Value)]),
+                String == jeysn_ll:json2_decode(JSON_Value)
             end).
 
 %%-type json_ws_char() :: 16#20 | 16#09 | 16#0a | 16#0d.
@@ -166,7 +166,7 @@ prop_decode() ->
             begin
                 Str = encode_value(V),
 %%                io:format("\n\n~s\n\n", [Str]),
-                ejson:json2_decode(Str) == V
+                jeysn_ll:json2_decode(Str) == V
             end).
 
 prop_decode_ws() ->
@@ -176,7 +176,7 @@ prop_decode_ws() ->
                 Str = encode_value(V, WS),
 %%                io:format("\n\n~s\n\n", [Str]),
 %%                io:format("\n~w\n", [Space]),
-                ejson:json2_decode(Str) == V
+                jeysn_ll:json2_decode(Str) == V
             end).
 
 test_str() ->
@@ -185,7 +185,7 @@ test_str() ->
 prop_test() ->
     ?FORALL(Str, test_str(),
             begin
-                _Term = ejson:json2_decode(Str),
+                _Term = jeysn_ll:json2_decode(Str),
 %%                io:format("\n\nStr: ~s\nTerm: ~9999p\n\n", [Str, _Term]),
                 true
             end).
@@ -223,7 +223,7 @@ chopped(String, ChunkSize) ->
                 end
         end,
     try
-        ejson:json2_decode_stream(ReadF)
+        jeysn_ll:json2_decode_stream(ReadF)
     after
         erase(Ref)
     end.

@@ -1,10 +1,10 @@
--module(sejst).
+-module(jeysn).
 
 -export([decode/1, decode_file/1, decode_stream/1]).
 -export([json2_decode/1, json2_decode_file/1, json2_decode_stream/1]).
 -export([encode/1, encode/2]).
 
--import(ejson,
+-import(jeysn_ll,
         [init/0, init/1, init_string/1, init_string/2,
          next_token/1, data/2, get_token_position/1]).
 
@@ -253,9 +253,9 @@ encode(Object, X) when is_map(Object) ->
 encode({Key, Value}, X) ->
     [encode(Key, X), $:, encode(Value, X)];
 encode(Str, _) when is_atom(Str) ->
-    ejson:encode_string(atom_to_binary(Str, utf8));
+    jeysn_ll:encode_string(atom_to_binary(Str, utf8));
 encode(Str, _) when is_binary(Str) ->
-    ejson:encode_string(Str);
+    jeysn_ll:encode_string(Str);
 
 encode("", _) ->
     <<"\"\"">>;
@@ -264,7 +264,7 @@ encode(Item, X) when is_list(Item) ->
         false ->
             [$[, encode_sequence(Item, X), $]];
         true ->
-            ejson:encode_string(Item)
+            jeysn_ll:encode_string(Item)
     end.
 
 encode_sequence([Item], X) ->

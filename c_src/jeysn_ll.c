@@ -38,12 +38,12 @@ static ERL_NIF_TERM am_error;
 static ERL_NIF_TERM am_ok;
 
 
-typedef struct ejson_state {
+typedef struct jeysn_state {
     ErlNifPid owner;       /* pid of the owning process */
     int string_format;     /* 0 binary, 1 string, 2 atom, 3 existing atom */
     int string_split;      /* -1 or 0..127 */
     json_state_t js;
-} ejson_state_t;
+} jeysn_state_t;
 
 static inline ERL_NIF_TERM make_json_string(ErlNifEnv *env, int sfmt,
                                             const char *str, size_t strsz)
@@ -66,7 +66,7 @@ static inline ERL_NIF_TERM make_json_string(ErlNifEnv *env, int sfmt,
     return term;
 }
 
-static ERL_NIF_TERM make_json_token(ErlNifEnv *env, ejson_state_t *ejs,
+static ERL_NIF_TERM make_json_token(ErlNifEnv *env, jeysn_state_t *ejs,
                                     int string_format, int string_split)
 {
     int sfmt = (string_format == -1) ? ejs->string_format : string_format;
@@ -146,7 +146,7 @@ static ERL_NIF_TERM make_json_token(ErlNifEnv *env, ejson_state_t *ejs,
     }
 }
 
-static ERL_NIF_TERM make_position(ErlNifEnv* env, ejson_state_t *ejs)
+static ERL_NIF_TERM make_position(ErlNifEnv* env, jeysn_state_t *ejs)
 {
     ERL_NIF_TERM buf1, buf2;
     if (ejs->js.buf.buf) {
@@ -165,21 +165,21 @@ static ERL_NIF_TERM make_position(ErlNifEnv* env, ejson_state_t *ejs)
     return enif_make_tuple3(env, pos, buf1, buf2);
 }
 
-static ErlNifResourceType *ejson_state_type = NULL;
+static ErlNifResourceType *jeysn_state_type = NULL;
 
 static void destroy_state(ErlNifEnv *env, void *obj)
 {
-    ejson_state_t *ejs = obj;
+    jeysn_state_t *ejs = obj;
     json_state_destroy(&ejs->js);
 //    enif_fprintf(stderr, "destroy_state(<%p>)\n", ejs);
     return;
 }
 
-static inline int get_ejson_state_t(ErlNifEnv *env, ERL_NIF_TERM arg,
-                                    ejson_state_t **ejs)
+static inline int get_jeysn_state_t(ErlNifEnv *env, ERL_NIF_TERM arg,
+                                    jeysn_state_t **ejs)
 {
     ErlNifPid pid;
-    if (!enif_get_resource(env, arg, ejson_state_type, (void **)ejs)) {
+    if (!enif_get_resource(env, arg, jeysn_state_type, (void **)ejs)) {
         return 0;
     }
     memset(&pid, 0, sizeof(pid));
@@ -220,9 +220,9 @@ static int get_string_format_arg(ErlNifEnv* env, ERL_NIF_TERM arg,
 static ERL_NIF_TERM next_token(ErlNifEnv* env,
                                int argc, const ERL_NIF_TERM argv[])
 {
-    ejson_state_t *ejs = NULL;
+    jeysn_state_t *ejs = NULL;
     int string_format = -1, string_split = -2;
-    if (!get_ejson_state_t(env, argv[0], &ejs)) {
+    if (!get_jeysn_state_t(env, argv[0], &ejs)) {
         return enif_make_badarg(env);
     }
     if ((argc == 2) &&
@@ -255,9 +255,9 @@ static ERL_NIF_TERM next_token(ErlNifEnv* env,
 
 static ERL_NIF_TERM data(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
-    ejson_state_t *ejs = NULL;
+    jeysn_state_t *ejs = NULL;
     ErlNifBinary bin;
-    if (!get_ejson_state_t(env, argv[0], &ejs)) {
+    if (!get_jeysn_state_t(env, argv[0], &ejs)) {
         return enif_make_badarg(env);
     }
     if (enif_is_atom(env, argv[1]) && (enif_compare(am_eof, argv[1]) == 0)) {
@@ -281,8 +281,8 @@ static ERL_NIF_TERM data(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 static ERL_NIF_TERM
 get_position(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
-    ejson_state_t *ejs = NULL;
-    if (!get_ejson_state_t(env, argv[0], &ejs)) {
+    jeysn_state_t *ejs = NULL;
+    if (!get_jeysn_state_t(env, argv[0], &ejs)) {
         return enif_make_badarg(env);
     }
     return make_position(env, ejs);
@@ -291,8 +291,8 @@ get_position(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 static ERL_NIF_TERM
 get_token_position(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
-    ejson_state_t *ejs = NULL;
-    if (!get_ejson_state_t(env, argv[0], &ejs)) {
+    jeysn_state_t *ejs = NULL;
+    if (!get_jeysn_state_t(env, argv[0], &ejs)) {
         return enif_make_badarg(env);
     }
     return enif_make_tuple3(env,
@@ -304,8 +304,8 @@ get_token_position(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 static ERL_NIF_TERM debug(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
     ERL_NIF_TERM buf1, buf2;
-    ejson_state_t *ejs = NULL;
-    if (!get_ejson_state_t(env, argv[0], &ejs)) {
+    jeysn_state_t *ejs = NULL;
+    if (!get_jeysn_state_t(env, argv[0], &ejs)) {
         return enif_make_badarg(env);
     }
     if (ejs->js.buf.buf) {
@@ -327,9 +327,9 @@ static ERL_NIF_TERM debug(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 static ERL_NIF_TERM init(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
     ERL_NIF_TERM ret;
-    ejson_state_t *ejs;
+    jeysn_state_t *ejs;
 
-    ejs = enif_alloc_resource(ejson_state_type, sizeof(ejson_state_t));
+    ejs = enif_alloc_resource(jeysn_state_type, sizeof(jeysn_state_t));
     memset(ejs, 0, sizeof(*ejs));
     json_state_init(&ejs->js, enif_alloc, enif_free);
     ejs->string_format = 0;
@@ -403,13 +403,13 @@ static int atload(ErlNifEnv* env, void** priv_data, ERL_NIF_TERM load_info)
 {
     ErlNifResourceType* st;
 
-    st = enif_open_resource_type(env, "ejson", "state",
+    st = enif_open_resource_type(env, "jeysn", "state",
                                  destroy_state,
                                  ERL_NIF_RT_CREATE, NULL);
     if (st == NULL)
         return -1;
 
-    ejson_state_type = st;
+    jeysn_state_type = st;
 
     am_json_token_begin_array = enif_make_atom(env, "[");
     am_json_token_begin_object = enif_make_atom(env, "{");
@@ -442,4 +442,4 @@ static ErlNifFunc nif_funcs[] = {
     , {"escape_string", 1, escape_string}
 };
 
-ERL_NIF_INIT(ejson, nif_funcs, atload, NULL, NULL, NULL);
+ERL_NIF_INIT(jeysn_ll, nif_funcs, atload, NULL, NULL, NULL);
