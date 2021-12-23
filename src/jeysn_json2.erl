@@ -2,10 +2,12 @@
 %% Copyright Sebastian Strollo <seb@strollo.org>
 %% SPDX-License-Identifier: Apache-2.0
 %%
--module(jeysn).
-
+-module(jeysn_json2).
+%%
+%% Decode into structures compatible with erlyaws/yaws/json2 (should
+%% you ever need it:)
+%%
 -export([decode/1, decode_file/1, decode_stream/1]).
--export([encode/1, encode/2]).
 
 -import(jeysn_ll,
         [init/0, init/1, init_string/1, init_string/2,
@@ -14,7 +16,7 @@
 %% ------------------------------------------------------------------------
 
 decode(Str) ->
-    S = init_string(Str),
+    S = init_string([{string,string}], Str),
     decode_value(S, next_token(S)).
 
 decode_file(FileName) ->
@@ -24,10 +26,10 @@ decode_file(FileName) ->
     decode_named_stream(F, FileName).
 
 decode_stream(ReadFun) ->
-    decode_value({init(), "-", ReadFun}).
+    decode_value({init([{string,string}]), "-", ReadFun}).
 
 decode_named_stream(ReadFun, Name) ->
-    decode_value({init(), Name, ReadFun}).
+    decode_value({init([{string,string}]), Name, ReadFun}).
 
 decode_value(S) ->
     decode_value(S, decode_next(S)).
@@ -50,28 +52,28 @@ decode_value(S, Token) ->
 decode_object(S) ->
     case decode_next(S) of
         '}' ->
-            #{};
+            {struct, []};
         Token ->
-            decode_object_member(S, Token, #{})
+            decode_object_member(S, Token, [])
     end.
 
-decode_object_member(S, {string, Key}, Object) ->
+decode_object_member(S, {string, Key}, Members) ->
     case decode_next(S) of
         ':' ->
             Value = decode_value(S),
-            decode_object_next(S, Object#{Key => Value});
+            decode_object_next(S, [{Key, Value}|Members]);
         Other ->
             decode_error(S, Other, [':'])
     end;
-decode_object_member(S, Other, _Object) ->
+decode_object_member(S, Other, _Members) ->
     decode_error(S, Other, [string]).
 
-decode_object_next(S, Object) ->
+decode_object_next(S, Members) ->
     case decode_next(S) of
         '}' ->
-            Object;
+            {struct, lists:reverse(Members)};
         ',' ->
-            decode_object_member(S, decode_next(S), Object);
+            decode_object_member(S, decode_next(S), Members);
         Other ->
             decode_error(S, Other, ['}', ','])
     end.
@@ -79,7 +81,7 @@ decode_object_next(S, Object) ->
 decode_array(S) ->
     case decode_next(S) of
         ']' ->
-            [];
+            {array, []};
         Token ->
             Value = decode_value(S, Token),
             decode_array_next(S, [Value])
@@ -88,7 +90,7 @@ decode_array(S) ->
 decode_array_next(S, Array) ->
     case decode_next(S) of
         ']' ->
-            lists:reverse(Array);
+            {array, lists:reverse(Array)};
         ',' ->
             Value = decode_value(S),
             decode_array_next(S, [Value|Array]);
@@ -126,50 +128,3 @@ file_data(S, {ok, Buf}) ->
     data(S, Buf);
 file_data(S, eof) ->
     data(S, eof).
-
-
-%% ------------------------------------------------------------------------
-
-encode(Term) ->
-    encode(Term, []).
-
-encode(false, _) -> <<"false">>;
-encode(null, _) -> <<"null">>;
-encode(true, _) -> <<"true">>;
-encode(N, _) when is_integer(N) -> integer_to_list(N);
-encode(N, _) when is_float(N) -> float_to_list(N);
-
-encode(Object, _) when map_size(Object) =:= 0 ->
-    <<"{}">>;
-encode(Object, X) when is_map(Object) ->
-    [${, encode_sequence(maps:to_list(Object), X), $}];
-encode({Key, Value}, X) ->
-    [encode(Key, X), $:, encode(Value, X)];
-encode(Str, _) when is_atom(Str) ->
-    jeysn_ll:encode_string(atom_to_binary(Str, utf8));
-encode(Str, _) when is_binary(Str) ->
-    jeysn_ll:encode_string(Str);
-
-encode("", _) ->
-    <<"\"\"">>;
-encode(Item, X) when is_list(Item) ->
-    case is_string(Item) of
-        false ->
-            [$[, encode_sequence(Item, X), $]];
-        true ->
-            jeysn_ll:encode_string(Item)
-    end.
-
-encode_sequence([Item], X) ->
-    encode(Item, X);
-encode_sequence([Item|Rest], X) ->
-    [encode(Item, X), $,|encode_sequence(Rest, X)].
-
-is_string([]) ->
-    true;
-is_string([Char|Chars]) when is_integer(Char)
-                             andalso (Char < 127)
-                             andalso (Char > 31) ->
-    is_string(Chars);
-is_string(_) ->
-    false.
