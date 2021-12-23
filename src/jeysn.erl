@@ -1,3 +1,7 @@
+%%
+%% Copyright Sebastian Strollo <seb@strollo.org>
+%% SPDX-License-Identifier: Apache-2.0
+%%
 -module(jeysn).
 
 -export([decode/1, decode_file/1, decode_stream/1]).

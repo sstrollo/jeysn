@@ -1,4 +1,9 @@
 %%
+%% Copyright Sebastian Strollo <seb@strollo.org>
+%% SPDX-License-Identifier: Apache-2.0
+%%
+
+%%
 %%  The JavaScript Object Notation (JSON) Data Interchange Format
 %%
 %%  https://tools.ietf.org/html/rfc7159
