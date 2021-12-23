@@ -1,5 +1,11 @@
--module(jeysn_prop_test).
+-module(prop_jeysn).
+
+-ifdef(DEBUG).
 -compile(export_all).
+-endif.
+
+-export([test/0, profile/0, s/0]).
+
 -include_lib("proper/include/proper.hrl").
 
 test() ->
