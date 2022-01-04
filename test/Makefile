@@ -23,7 +23,7 @@ jeysn_prop_test.beam: jeysn_prop_test.erl
 	$(ERLC) -I$(PROPER)/include -pz $(PROPER)/ebin $<
 
 erl:
-	env ERL_LIBS=`cd .. && pwd`:$(PROPER) $(ERL)
+	env ERL_LIBS=`cd .. && pwd`:$(PROPER):$(ERL_LIBS) $(ERL)
 
 
 # ------------------------------------------------------------------------
