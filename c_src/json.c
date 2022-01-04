@@ -629,6 +629,8 @@ json_result_t json_next_token(json_state_t *jsp)
             jtok->type = json_token_false;
             update_position(jsp, p+5);
             return json_result_token;
+        } else {
+            goto invalid_char;
         }
         break;
     case 'n':
@@ -640,6 +642,8 @@ json_result_t json_next_token(json_state_t *jsp)
             jtok->type = json_token_null;
             update_position(jsp, p+4);
             return json_result_token;
+        } else {
+            goto invalid_char;
         }
         break;
     case 't':
@@ -651,6 +655,8 @@ json_result_t json_next_token(json_state_t *jsp)
             jtok->type = json_token_true;
             update_position(jsp, p+4);
             return json_result_token;
+        } else {
+            goto invalid_char;
         }
         break;
     case json_char_quotation_mark:
@@ -662,15 +668,17 @@ json_result_t json_next_token(json_state_t *jsp)
             update_position(jsp, p);
             return json_number(jsp);
         } else {
-            update_position(jsp, p);
-            jtok->type = json_token_error;
-            jtok->value.error.code = json_error_invalid_char;
-            jtok->value.error.string = "invalid character";
-            return json_result_error;
+            goto invalid_char;
         }
     }
 need_more:
     return json_result_error_on_eof(jsp);
+invalid_char:
+    update_position(jsp, p);
+    jtok->type = json_token_error;
+    jtok->value.error.code = json_error_invalid_char;
+    jtok->value.error.string = "invalid character";
+    return json_result_error;
 }
 
 
