@@ -18,7 +18,7 @@ decode(Str) ->
     decode_value(S, next_token(S)).
 
 decode_file(FileName) ->
-    BufSz = 8192,
+    BufSz = 64*1024, % 8192,
     {ok, Fd} = file:open(FileName, [read,binary,raw]),
     F = fun () -> file:read(Fd, BufSz) end,
     decode_named_stream(F, FileName).
@@ -46,24 +46,24 @@ decode_value(S, Token) ->
         Other -> decode_error(S, Other, [value])
     end.
 
-%% looking-for: member/end-object
+%% looking-for: pair/end-object
 decode_object(S) ->
     case decode_next(S) of
         '}' ->
             #{};
         Token ->
-            decode_object_member(S, Token, #{})
+            decode_object_pair(S, Token, #{})
     end.
 
-decode_object_member(S, {string, Key}, Object) ->
+decode_object_pair(S, {string, Name}, Object) ->
     case decode_next(S) of
         ':' ->
             Value = decode_value(S),
-            decode_object_next(S, Object#{Key => Value});
+            decode_object_next(S, Object#{Name => Value});
         Other ->
             decode_error(S, Other, [':'])
     end;
-decode_object_member(S, Other, _Object) ->
+decode_object_pair(S, Other, _Object) ->
     decode_error(S, Other, [string]).
 
 decode_object_next(S, Object) ->
@@ -71,7 +71,7 @@ decode_object_next(S, Object) ->
         '}' ->
             Object;
         ',' ->
-            decode_object_member(S, decode_next(S), Object);
+            decode_object_pair(S, decode_next(S), Object);
         Other ->
             decode_error(S, Other, ['}', ','])
     end.

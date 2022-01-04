@@ -24,7 +24,6 @@
 %% tests
 -export([debug/1]).
 -export([file/1, tokenize/1]).
--export([json2_decode/1, json2_decode_file/1, json2_decode_stream/1]).
 
 -on_load(nif_load/0).
 
@@ -85,11 +84,13 @@ eof(State) ->
 
 -type string_format() :: string_format_type() | {string_format_type(), 0..127}.
 -type string_format_type() :: 'binary' | 'string' | 'atom' | 'existing_atom'.
+
 -spec next_token(jeysn_tokenizer(), string_format()) ->
-                        json_token() |
-                        {'error', json_token()|'error', position()} |
-                        more |
-                        eof.
+                        json_token()
+                      | {'error', json_token()|'error', position()}
+                      | 'more'
+                      | 'eof'
+                      .
 next_token(State, StringFormat) ->
     next_token_nif(State, string_format_internal(StringFormat)).
 
@@ -135,11 +136,14 @@ debug(_x) ->
 
 %% ------------------------------------------------------------------------
 
--spec encode_string(iodata()) -> iodata().
+-spec encode_string(iodata()) -> binary().
+encode_string(<<>>) ->
+    <<"\"\"">>;
 encode_string(Str) ->
-    [$", escape_string(Str), $"].
+    BinStr = escape_string(Str),
+    <<$", BinStr/binary, $">>.
 
-%% Note only characters required to be escaped are escaped. Any UTF-8
+%% Note: only characters required to be escaped are escaped. Any UTF-8
 %% code points in the input string are assumed to be correct, and will
 %% be returned as is.
 -spec escape_string(iodata()) -> binary().
@@ -193,115 +197,6 @@ tokenize(S, Tokens, {error, Err}) ->
     {error, lists:reverse(Tokens), debug(S), Err};
 tokenize(S, Tokens, Token) ->
     tokenize(S, [Token|Tokens], next_token(S, {atom,$:})).
-
-%% ------------------------------------------------------------------------
-
-json2_decode(Str) ->
-    S = init_string(Str),
-    json2_decode_value(S, next_token(S, string)).
-
-json2_decode_file(FileName) ->
-    BufSz = 8192,
-    {ok, Fd} = file:open(FileName, [read,binary,raw]),
-    F = fun () -> file:read(Fd, BufSz) end,
-    json2_decode_named_stream(F, FileName).
-
-json2_decode_stream(ReadFun) ->
-    json2_decode_value({init(), "-", ReadFun}).
-
-json2_decode_named_stream(ReadFun, Name) ->
-    json2_decode_value({init(), Name, ReadFun}).
-
-json2_decode_value(S) ->
-    json2_decode_value(S, json2_decode_next(S)).
-
-%% looking-for: false/null/true/number/string/begin-array/begin-object
-json2_decode_value(S, Token) ->
-    case Token of
-        false -> false;
-        null -> null;
-        true -> true;
-        {string, Str} -> Str;
-        '{' -> json2_decode_object(S);
-        '[' -> json2_decode_array(S);
-        N when is_number(N) -> N;
-        Other -> json2_decode_error(S, Other, [value])
-    end.
-
-%% looking-for: member/end-object
-json2_decode_object(S) ->
-    case json2_decode_next(S) of
-        '}' ->
-            {struct, []};
-        Token ->
-            json2_decode_object_member(S, Token, [])
-    end.
-
-json2_decode_object_member(S, {string, Key}, Members) ->
-    case json2_decode_next(S) of
-        ':' ->
-            Value = json2_decode_value(S),
-            json2_decode_object_next(S, [{Key, Value}|Members]);
-        Other ->
-            json2_decode_error(S, Other, [':'])
-    end;
-json2_decode_object_member(S, Other, _Members) ->
-    json2_decode_error(S, Other, [string]).
-
-json2_decode_object_next(S, Members) ->
-    case json2_decode_next(S) of
-        '}' ->
-            {struct, lists:reverse(Members)};
-        ',' ->
-            json2_decode_object_member(S, json2_decode_next(S), Members);
-        Other ->
-            json2_decode_error(S, Other, ['}', ','])
-    end.
-
-json2_decode_array(S) ->
-    case json2_decode_next(S) of
-        ']' ->
-            {array, []};
-        Token ->
-            Value = json2_decode_value(S, Token),
-            json2_decode_array_next(S, [Value])
-    end.
-
-json2_decode_array_next(S, Array) ->
-    case json2_decode_next(S) of
-        ']' ->
-            {array, lists:reverse(Array)};
-        ',' ->
-            Value = json2_decode_value(S),
-            json2_decode_array_next(S, [Value|Array]);
-        Other ->
-            json2_decode_error(S, Other, [']', ','])
-    end.
-
-json2_decode_next({S, _, ReadF} = State) ->
-    case next_token(S, string) of
-        more ->
-            file_data(S, ReadF()),
-            json2_decode_next(State);
-        Token ->
-            Token
-    end;
-json2_decode_next(S) ->
-    next_token(S, string).
-
-json2_decode_error(S, Got, Expected) ->
-    {File, Line, Col} = json2_get_position(S),
-    io:format("~s:~w:~w: Error: got ~s expected: ~w\n",
-              [File, Line, Col, Got, Expected]),
-    erlang:error(syntax).
-
-json2_get_position({S, File, _}) ->
-    {_, Line, Col} = get_token_position(S),
-    {File, Line, Col};
-json2_get_position(S) ->
-    {_, Line, Col} = get_token_position(S),
-    {"-", Line, Col}.
-
 
 %% ------------------------------------------------------------------------
 

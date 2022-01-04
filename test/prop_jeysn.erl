@@ -146,8 +146,8 @@ prop_skip_invalid_escape_sequence() ->
             begin
                 String = lists:flatten([Pre,Seq,Post]),
                 JSON_Value = [$", String, $"],
-%%             io:format("\n~w ~w\n", [String, jeysn_ll:json2_decode(JSON_Value)]),
-                String == jeysn_ll:json2_decode(JSON_Value)
+%%             io:format("\n~w ~w\n", [String, jeysn_json2:decode(JSON_Value)]),
+                String == jeysn_json2:decode(JSON_Value)
             end).
 
 prop_skip_invalid_escape_u_sequence() ->
@@ -158,8 +158,8 @@ prop_skip_invalid_escape_u_sequence() ->
             begin
                 String = lists:flatten([Pre,Seq,Post]),
                 JSON_Value = [$", String, $"],
-%%             io:format("\n~w ~w\n", [String, jeysn_ll:json2_decode(JSON_Value)]),
-                String == jeysn_ll:json2_decode(JSON_Value)
+%%             io:format("\n~w ~w\n", [String, jeysn_json2:decode(JSON_Value)]),
+                String == jeysn_json2:decode(JSON_Value)
             end).
 
 %%-type json_ws_char() :: 16#20 | 16#09 | 16#0a | 16#0d.
@@ -172,7 +172,7 @@ prop_decode() ->
             begin
                 Str = encode_value(V),
 %%                io:format("\n\n~s\n\n", [Str]),
-                jeysn_ll:json2_decode(Str) == V
+                jeysn_json2:decode(Str) == V
             end).
 
 prop_decode_ws() ->
@@ -182,7 +182,7 @@ prop_decode_ws() ->
                 Str = encode_value(V, WS),
 %%                io:format("\n\n~s\n\n", [Str]),
 %%                io:format("\n~w\n", [Space]),
-                jeysn_ll:json2_decode(Str) == V
+                jeysn_json2:decode(Str) == V
             end).
 
 test_str() ->
@@ -191,7 +191,7 @@ test_str() ->
 prop_test() ->
     ?FORALL(Str, test_str(),
             begin
-                _Term = jeysn_ll:json2_decode(Str),
+                _Term = jeysn_json2:decode(Str),
 %%                io:format("\n\nStr: ~s\nTerm: ~9999p\n\n", [Str, _Term]),
                 true
             end).
@@ -229,7 +229,7 @@ chopped(String, ChunkSize) ->
                 end
         end,
     try
-        jeysn_ll:json2_decode_stream(ReadF)
+        jeysn_json2:decode_stream(ReadF)
     after
         erase(Ref)
     end.
