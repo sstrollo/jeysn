@@ -1,11 +1,12 @@
 
-build: jtest jtest2 $(patsubst %.erl,%.beam,$(wilcard *.erl))
+BEAMS = $(patsubst %.erl,%.beam,$(filter-out prop_%,$(wildcard *.erl)))
+
+build: jtest jtest2 $(BEAMS)
 
 # ------------------------------------------------------------------------
 
 ERL    ?= erl
 ERLC   ?= erlc
-PROPER ?= ../../proper
 
 %.beam: %.erl
 	$(ERLC) $<
@@ -13,18 +14,23 @@ PROPER ?= ../../proper
 test: jeysn_test.beam
 	$(ERL) -pa ../ebin -noshell -s jeysn_test test
 
-proper: jeysn_prop_test.beam
-	$(ERL) -noshell -pa ../ebin -pz $(PROPER)/ebin -s jeysn_prop_test test
+# ------------------------------------------------------------------------
 
-proper_profile: jeysn_prop_test.beam
-	$(ERL) -pa ../ebin -pz $(PROPER)/ebin -s jeysn_prop_test profile
+PROPER ?= ../../proper
 
-jeysn_prop_test.beam: jeysn_prop_test.erl
+proper: prop_jeysn.beam
+	$(ERL) -noshell -pa ../ebin -pz $(PROPER)/ebin -s prop_jeysn test
+
+proper_profile: prop_jeysn.beam
+	$(ERL) -pa ../ebin -pz $(PROPER)/ebin -s prop_jeysn profile
+
+prop_jeysn.beam: prop_jeysn.erl
 	$(ERLC) -I$(PROPER)/include -pz $(PROPER)/ebin $<
 
-erl:
-	env ERL_LIBS=`cd .. && pwd`:$(PROPER):$(ERL_LIBS) $(ERL)
+# ------------------------------------------------------------------------
 
+erl: $(BEAMS)
+	env ERL_LIBS=`cd .. && pwd`:$(PROPER):$(ERL_LIBS) $(ERL)
 
 # ------------------------------------------------------------------------
 

@@ -23,7 +23,6 @@
 
 %% tests
 -export([debug/1]).
--export([file/1, tokenize/1]).
 
 -on_load(nif_load/0).
 
@@ -149,54 +148,6 @@ encode_string(Str) ->
 -spec escape_string(iodata()) -> binary().
 escape_string(_Str) ->
     nif_only().
-
-%% ------------------------------------------------------------------------
-
-file(FName) ->
-    BufSz = 16,
-    case file:open(FName, [read,binary,raw]) of
-        {ok, Fd} ->
-            F = fun () -> file:read(Fd, BufSz) end,
-            floop(init(), F, []);
-        _Err ->
-            io:format("~p\n", [_Err]),
-            _Err
-    end.
-
-file_data(S, {ok, Buf}) ->
-    data(S, Buf);
-file_data(S, eof) ->
-    data(S, eof).
-
-floop(State, ReadF, Res) ->
-    case next_token(State, string) of
-        more ->
-            _Debug = debug(State),
-%            io:format("Debug: ~p\n", [debug(State)]),
-            file_data(State, ReadF()),
-            floop(State, ReadF, Res);
-        eof ->
-            _Debug = debug(State),
-%            io:format("Debug: ~p\n", [debug(State)]),
-            lists:reverse(Res);
-        {error, Error} ->
-            {error, Error, get_position(State)};
-        Token ->
-            io:format("Token: ~p\n", [Token]),
-            floop(State, ReadF, [Token|Res])
-    end.
-
-
-tokenize(Buffer) ->
-    S = init_string(Buffer),
-    tokenize(S, [], next_token(S, {atom,$:})).
-
-tokenize(_S, Tokens, eof) ->
-    lists:reverse(Tokens);
-tokenize(S, Tokens, {error, Err}) ->
-    {error, lists:reverse(Tokens), debug(S), Err};
-tokenize(S, Tokens, Token) ->
-    tokenize(S, [Token|Tokens], next_token(S, {atom,$:})).
 
 %% ------------------------------------------------------------------------
 

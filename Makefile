@@ -19,7 +19,11 @@ rebar3:
 make: $(BEAMS)
 	cd c_src && $(MAKE)
 
-.PHONY: make
+test:
+	$(MAKE) make
+	cd test && $(MAKE) test
+
+.PHONY: make test
 
 
 ebin/%.beam: src/%.erl

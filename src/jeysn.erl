@@ -9,25 +9,35 @@
 
 -import(jeysn_ll,
         [init/0, init/1, init_string/1, init_string/2,
-         next_token/1, data/2, get_token_position/1]).
+         data/2, get_token_position/1]).
 
 %% ------------------------------------------------------------------------
 
+-record(ds, {
+          tokenizer
+          , filename = <<"-">>
+          , string_format = binary
+          , name_format = existing_atom
+          , more = fun () -> eof end
+         }).
+
+
 decode(Str) ->
-    S = init_string(Str),
-    decode_value(S, next_token(S)).
+    S = #ds{tokenizer = init_string(Str)},
+    decode_value(S).
 
 decode_file(FileName) ->
     BufSz = 64*1024, % 8192,
     {ok, Fd} = file:open(FileName, [read,binary,raw]),
-    F = fun () -> file:read(Fd, BufSz) end,
-    decode_named_stream(F, FileName).
+    S = #ds{tokenizer = init(),
+            filename = FileName,
+            more = fun () -> file:read(Fd, BufSz) end},
+    decode_value(S).
 
 decode_stream(ReadFun) ->
-    decode_value({init(), "-", ReadFun}).
-
-decode_named_stream(ReadFun, Name) ->
-    decode_value({init(), Name, ReadFun}).
+    S = #ds{tokenizer = init(),
+            more = ReadFun},
+    decode_value(S).
 
 decode_value(S) ->
     decode_value(S, decode_next(S)).
@@ -42,13 +52,12 @@ decode_value(S, Token) ->
         '{' -> decode_object(S);
         '[' -> decode_array(S);
         N when is_number(N) -> N;
-        {number, IntegerBinary} -> binary_to_integer(IntegerBinary);
         Other -> decode_error(S, Other, [value])
     end.
 
-%% looking-for: pair/end-object
+%% looking-for: pair-name/end-object
 decode_object(S) ->
-    case decode_next(S) of
+    case decode_next(S, S#ds.name_format) of
         '}' ->
             #{};
         Token ->
@@ -71,7 +80,7 @@ decode_object_next(S, Object) ->
         '}' ->
             Object;
         ',' ->
-            decode_object_pair(S, decode_next(S), Object);
+            decode_object_pair(S, decode_next(S, S#ds.name_format), Object);
         Other ->
             decode_error(S, Other, ['}', ','])
     end.
@@ -96,16 +105,28 @@ decode_array_next(S, Array) ->
             decode_error(S, Other, [']', ','])
     end.
 
-decode_next({S, _, ReadF} = State) ->
-    case next_token(S) of
-        more ->
-            file_data(S, ReadF()),
-            decode_next(State);
-        Token ->
-            Token
-    end;
 decode_next(S) ->
-    next_token(S).
+    decode_next(S, S#ds.string_format).
+
+decode_next(S, StrFmt) ->
+    case jeysn_ll:next_token(S#ds.tokenizer, StrFmt) of
+        more ->
+            case (S#ds.more)() of
+                {ok, Data} ->
+                    jeysn_ll:data(S#ds.tokenizer, Data),
+                    decode_next(S, StrFmt);
+                eof ->
+                    jeysn_ll:eof(S#ds.tokenizer),
+                    decode_next(S, StrFmt);
+                {error, _} = _Err ->
+                    {error, more_error,
+                     jeysn_ll:get_position(S#ds.tokenizer)}
+            end;
+        {number, IntegerBinary} ->
+            binary_to_integer(IntegerBinary);
+        TokenOrErrorOrEOF ->
+            TokenOrErrorOrEOF
+    end.
 
 decode_error(S, Got, Expected) ->
     {File, Line, Col} = get_position(S),
@@ -113,20 +134,9 @@ decode_error(S, Got, Expected) ->
               [File, Line, Col, Got, Expected]),
     erlang:error(syntax).
 
-get_position({S, File, _}) ->
-    {_, Line, Col} = get_token_position(S),
-    {File, Line, Col};
-get_position(S) ->
-    {_, Line, Col} = get_token_position(S),
-    {"-", Line, Col}.
-
-%% ------------------------------------------------------------------------
-
-file_data(S, {ok, Buf}) ->
-    data(S, Buf);
-file_data(S, eof) ->
-    data(S, eof).
-
+get_position(#ds{tokenizer = T, filename = File}) ->
+    {_, Line, Col} = get_token_position(T),
+    {File, Line, Col}.
 
 %% ------------------------------------------------------------------------
 
