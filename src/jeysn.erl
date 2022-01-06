@@ -269,9 +269,13 @@ encode_value(Str, Out, _L, S) when is_atom(Str) ->
 encode_value(Str, Out, _L, S) when is_binary(Str) ->
     encode_string(Str, Out, S);
 %% Object
-encode_value(Object, Out, _L, S) when map_size(Object) =:= 0 ->
-    emit(<<"{}">>, Out, S);
 encode_value([{}], Out, _L, S) ->
+    emit(<<"{}">>, Out, S);
+encode_value({struct, []}, Out, _L, S) ->
+    emit(<<"{}">>, Out, S);
+encode_value({struct, Object}, Out, L, S) ->
+    encode_object(Object, Out, L, S);
+encode_value(Object, Out, _L, S) when map_size(Object) =:= 0 ->
     emit(<<"{}">>, Out, S);
 encode_value(Object, Out, L, S) when is_map(Object) ->
     encode_object(Object, Out, L, S);
@@ -280,10 +284,14 @@ encode_value(Object, Out, L, S) when is_tuple(hd(Object)) ->
 %% Array
 encode_value([], Out, _L, S) ->
     emit(<<"[]">>, Out, S);
+encode_value({array, []}, Out, _L, S) ->
+    emit(<<"[]">>, Out, S);
+encode_value({array, Array}, Out, L, S) ->
+    encode_array(Array, Out, L, S);
 encode_value(Array, Out, L, #es{list_may_be_string = false} = S)
   when is_list(Array) ->
     encode_array(Array, Out, L, S);
-encode_value(Value, Out, L, #es{list_may_be_string = false} = S)
+encode_value(Value, Out, L, #es{list_may_be_string = true} = S)
   when is_list(Value) ->
     case is_string(Value) of
         false ->

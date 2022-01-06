@@ -4,8 +4,9 @@
 %%
 -module(jeysn_json2).
 %%
-%% Decode into structures compatible with erlyaws/yaws/json2 (should
-%% you ever need it:)
+%% Decode into structures compatible with
+%% https://github.com/erlyaws/yaws/blob/master/src/json2.erl
+%% (should you ever need it:)
 %%
 -export([decode/1, decode_file/1, decode_stream/1]).
 
