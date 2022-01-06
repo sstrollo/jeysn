@@ -52,6 +52,8 @@ decode_stream(ReadFun, Opts) ->
 -define(default(RECORD, ITEM), element(#RECORD.ITEM, #RECORD{})).
 -define(opt(NAME, REC, OPTS),
         NAME = proplists:get_value(NAME, OPTS, ?default(REC, NAME))).
+-define(opt_b(NAME, OPTS),
+        NAME = proplists:get_bool(NAME, OPTS)).
 
 decode_opts(Opts) ->
     #ds{
@@ -64,12 +66,12 @@ decode_validate_opts(Opts) when is_map(Opts) ->
      decode_validate_opts(proplists:from_map(Opts));
 decode_validate_opts(Opts) when is_list(Opts) ->
     lists:foreach(
-      fun ({name, StringType}) -> assert(string, StringType);
-          ({string, StringType}) -> assert(string, StringType);
+      fun ({name, StringType}) -> assert(name, string, StringType);
+          ({string, StringType}) -> assert(string, string, StringType);
           ({object, map}) -> ok;
           ({object, list}) -> ok;
-          ({buffer_size, N}) -> assert(non_zero_integer, N);
-          (_) -> erlang:error(badarg)
+          ({buffer_size, N}) -> assert(buffer_size, {integer, 0}, N);
+          (_Opt) -> erlang:error(badarg, [_Opt])
       end,
       Opts),
     Opts;
@@ -129,8 +131,6 @@ decode_object_next(S, Object) ->
     case decode_next(S) of
         '}' when S#ds.object == map ->
             Object;
-        '}' when S#ds.object == list andalso Object == [] ->
-            [{}];
         '}' when S#ds.object == list ->
             lists:reverse(Object);
         ',' ->
@@ -197,6 +197,7 @@ get_position(#ds{tokenizer = T, filename = File}) ->
 -record(es, {
           space = 0
           , indent = 0
+          , nl = false
           , list_may_be_string = false
           , io = undefined
          }).
@@ -206,14 +207,15 @@ encode(Term) ->
 
 encode(Term, Opts) ->
     S = encode_opts(encode_validate_opts(Opts)),
-    encode_value(Term, <<>>, 0, S).
+    encode_value_0(Term, <<>>, S).
 
 encode_opts(Opts) ->
     #es{
          ?opt(space, es, Opts)
          , ?opt(indent, es, Opts)
+         , ?opt_b(nl, Opts)
          , ?opt(io, es, Opts)
-         , list_may_be_string = proplists:get_bool(list_may_be_string, Opts)
+         , ?opt_b(list_may_be_string, Opts)
        }.
 
 encode_validate_opts(Opts) when is_map(Opts) ->
@@ -226,17 +228,33 @@ encode_validate_opts(Opts0) when is_list(Opts0) ->
                      , {{indent, true}, [{indent, 1}]}
                      , {pretty, [{space, 1}, {indent, 2}]}
                     ]}]),
+    io:format("Opts ~p\n", [Opts]),
     lists:foreach(
-      fun ({space, N}) -> assert(integer, N);
-          ({indent, N}) -> assert(integer, N);
-          ({list_may_be_string, B}) -> assert(boolen, B);
-          ({io, F}) -> assert({function, 1}, F);
-          (_) -> erlang:error(badarg)
+      fun ({space, N}) -> assert(space, integer, N);
+          ({indent, N}) -> assert(indent, integer, N);
+          ({nl, B}) -> assert(nl, boolean, B);
+          ({list_may_be_string, B}) -> assert(list_may_be_string, boolean, B);
+          ({io, F}) -> assert(io, {'or', {function, 1}, {function, 2}}, F);
+          (nl) -> ok;
+          (list_may_be_string) -> ok;
+          (_Opt) -> erlang:error(badarg, [_Opt])
       end,
       Opts),
     Opts;
 encode_validate_opts(Opt) ->
     encode_validate_opts([Opt]).
+
+encode_value_0(Term, Out0, S) ->
+    Out1 = encode_value(Term, Out0, 0, S),
+    Out2 =
+        case S of
+            #es{nl = true, indent = N} when N > 0 ->
+                emit(<<$\n>>, Out1, S);
+            _ ->
+                Out1
+        end,
+    %% emit(eoj, Out2, S);
+    Out2.
 
 encode_value(false, Out, _L, S) -> emit(<<"false">>, Out, S);
 encode_value(null,  Out, _L, S) -> emit(<<"null">>, Out, S);
@@ -367,7 +385,9 @@ emit(Str, Out, #es{io = undefined}) ->
     BinStr = iolist_to_binary(Str),
     <<Out/binary, BinStr/binary>>;
 emit(Str, _Out, #es{io = F}) when is_function(F, 1) ->
-    F(Str).
+    F(Str);
+emit(Str, Out, #es{io = F}) when is_function(F, 2) ->
+    F(Str, Out).
 
 is_string([]) ->
     true;
@@ -380,14 +400,29 @@ is_string(_) ->
 
 %% ------------------------------------------------------------------------
 
-assert(string, 'binary') -> ok;
-assert(string, 'string') -> ok;
-assert(string, 'atom') -> ok;
-assert(string, 'existing_atom') -> ok;
-assert(non_zero_integer, N) when is_integer(N) andalso N > 0 -> ok;
-assert(integer, N) when is_integer(N) andalso N >= 0 -> ok;
-assert(boolen, true) -> ok;
-assert(boolen, false) -> ok;
-assert({function, Arity}, F) when is_function(F, Arity) -> ok;
+assert(Name, Type, Value) ->
+    case assert(Type, Value) of
+        true ->
+            ok;
+        false ->
+            erlang:error(badarg, [Name, Value])
+    end.
+
+assert(string, 'binary') -> true;
+assert(string, 'string') -> true;
+assert(string, 'atom') -> true;
+assert(string, 'existing_atom') -> true;
+assert({integer, LgT}, N) when is_integer(N) andalso N > LgT -> true;
+%assert({integer, From, To}, N) when is_integer(N)
+%                                    andalso N >= From
+%                                    andalso N =< To -> true;
+assert(integer, N) when is_integer(N) andalso N >= 0 -> true;
+assert(boolean, true) -> true;
+assert(boolean, false) -> true;
+assert({function, Arity}, F) when is_function(F, Arity) -> true;
+assert({'or', A, B}, Value) ->
+    assert(A, Value) orelse assert(B, Value);
+%assert({'and', A, B}, Value) ->
+%    assert(A, Value) andalso assert(B, Value);
 assert(_, _) ->
-    erlang:error(badarg).
+    false.
