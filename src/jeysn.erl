@@ -199,6 +199,8 @@ get_position(#ds{tokenizer = T, filename = File}) ->
           , indent = 0
           , nl = false
           , list_may_be_string = false
+          , records = undefined
+          , record_undefined = null
           , io = undefined
          }).
 
@@ -216,6 +218,8 @@ encode_opts(Opts) ->
          , ?opt_b(nl, Opts)
          , ?opt(io, es, Opts)
          , ?opt_b(list_may_be_string, Opts)
+         , ?opt(records, es, Opts)
+         , ?opt(record_undefined, es, Opts)
        }.
 
 encode_validate_opts(Opts) when is_map(Opts) ->
@@ -228,12 +232,13 @@ encode_validate_opts(Opts0) when is_list(Opts0) ->
                      , {{indent, true}, [{indent, 1}]}
                      , {pretty, [{space, 1}, {indent, 2}]}
                     ]}]),
-    io:format("Opts ~p\n", [Opts]),
     lists:foreach(
       fun ({space, N}) -> assert(space, integer, N);
           ({indent, N}) -> assert(indent, integer, N);
           ({nl, B}) -> assert(nl, boolean, B);
           ({list_may_be_string, B}) -> assert(list_may_be_string, boolean, B);
+          ({records, M}) when is_map(M) -> ok;
+          ({record_undefined, _}) -> ok;
           ({io, F}) -> assert(io, {'or', {function, 1}, {function, 2}}, F);
           (nl) -> ok;
           (list_may_be_string) -> ok;
@@ -275,11 +280,21 @@ encode_value({struct, []}, Out, _L, S) ->
     emit(<<"{}">>, Out, S);
 encode_value({struct, Object}, Out, L, S) ->
     encode_object(Object, Out, L, S);
+encode_value({object, []}, Out, _L, S) ->
+    emit(<<"{}">>, Out, S);
+encode_value({object, Object}, Out, L, S) ->
+    encode_object(Object, Out, L, S);
 encode_value(Object, Out, _L, S) when map_size(Object) =:= 0 ->
     emit(<<"{}">>, Out, S);
 encode_value(Object, Out, L, S) when is_map(Object) ->
     encode_object(Object, Out, L, S);
 encode_value(Object, Out, L, S) when is_tuple(hd(Object)) ->
+    encode_object(Object, Out, L, S);
+encode_value(Record, Out, L, #es{records = Records} = S)
+  when is_map_key(element(1, Record), Records) ->
+    [RecordName|Values] = tuple_to_list(Record),
+    Object = record_to_proplist(
+               maps:get(RecordName, Records), Values, S#es.record_undefined),
     encode_object(Object, Out, L, S);
 %% Array
 encode_value([], Out, _L, S) ->
@@ -405,6 +420,15 @@ is_string([Char|Chars]) when is_integer(Char)
     is_string(Chars);
 is_string(_) ->
     false.
+
+record_to_proplist([_Name|Names], [undefined|Values], remove = Undefined) ->
+    record_to_proplist(Names, Values, Undefined);
+record_to_proplist([Name|Names], [undefined|Values], Undefined) ->
+    [{Name, Undefined} | record_to_proplist(Names, Values, Undefined)];
+record_to_proplist([Name|Names], [Value|Values], Undefined) ->
+    [{Name, Value} | record_to_proplist(Names, Values, Undefined)];
+record_to_proplist([], [], _) ->
+    [].
 
 %% ------------------------------------------------------------------------
 
