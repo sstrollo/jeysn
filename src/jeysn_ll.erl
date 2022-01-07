@@ -56,10 +56,10 @@ init_nif(_Options) ->
 
 -spec init_string(iodata()) -> jeysn_tokenizer().
 init_string(String) ->
-    init_string([], String).
+    init_string(String, []).
 
--spec init_string(init_options(), iodata()) -> jeysn_tokenizer().
-init_string(Options, String) ->
+-spec init_string(iodata(), init_options()) -> jeysn_tokenizer().
+init_string(String, Options) ->
     S = init(Options),
     data(S, String),
     eof(S),
@@ -152,20 +152,37 @@ escape_string(_Str) ->
 %% ------------------------------------------------------------------------
 
 nif_load() ->
-    Dir =
-        %% ../priv only works in test or src
+    ObjectFile = atom_to_list(?MODULE),
+    %% Why can't I just do this?
+    %% erlang:load_nif(ObjectFile, 0).
+    Path =
         case application:get_application(?MODULE) of
-            undefined ->
-                "../priv";
             {ok, Application} ->
                 case code:priv_dir(Application) of
                     {error,_} ->
-                        "../priv";
+                        %% Huh?
+                        search_priv_dir(ObjectFile);
                     PrivDir ->
-                        PrivDir
-                end
+                        filename:join(PrivDir, ObjectFile)
+                end;
+            undefined ->
+                %% I don't quite understand when this happens
+                search_priv_dir(ObjectFile)
         end,
-    erlang:load_nif(filename:append(Dir, "jeysn_ll"), 0).
+    erlang:load_nif(Path, 0).
+
+search_priv_dir(File) ->
+    search_priv_dir(["../priv", "priv"], File).
+
+search_priv_dir([Dir|Dirs], File) ->
+    case file:list_dir(Dir) of
+        {ok, _} ->
+            filename:join(Dir, File);
+        _ ->
+            search_priv_dir(Dirs, File)
+    end;
+search_priv_dir([], File) ->
+    File.
 
 nif_only() ->
     erlang:nif_error(not_loaded).

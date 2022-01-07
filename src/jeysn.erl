@@ -16,7 +16,9 @@
           , filename = <<"-">>
           , string = binary
           , name = binary % existing_atom
-          , object = map % list
+          , object = map % list | {list, Wrap}
+          , empty_object = [{}]
+          , wrap_array = undefined % Term
           , more = fun () -> eof end
          }).
 
@@ -25,7 +27,7 @@ decode(Str) ->
     decode(Str, []).
 decode(Str, Opts) ->
     S0 = decode_opts(decode_validate_opts(Opts)),
-    S = S0#ds{tokenizer = jeysn_ll:init_string(Str)},
+    S = S0#ds{tokenizer = jeysn_ll:init_string(Str, [{string, S0#ds.string}])},
     decode_value(S).
 
 decode_file(FileName) ->
@@ -35,7 +37,7 @@ decode_file(FileName, Opts0) ->
     BufSz = proplists:get_value(buffer_size, Opts, 64*1024), % 8192,
     {ok, Fd} = file:open(FileName, [read,binary,raw]),
     S0 = decode_opts(Opts),
-    S = S0#ds{tokenizer = jeysn_ll:init(),
+    S = S0#ds{tokenizer = jeysn_ll:init([{string, S0#ds.string}]),
               filename = FileName,
               more = fun () -> file:read(Fd, BufSz) end},
     decode_value(S).
@@ -44,7 +46,7 @@ decode_stream(ReadFun) ->
     decode_stream(ReadFun, []).
 decode_stream(ReadFun, Opts) ->
     S0 = decode_opts(decode_validate_opts(Opts)),
-    S = S0#ds{tokenizer = jeysn_ll:init(),
+    S = S0#ds{tokenizer = jeysn_ll:init([{string, S0#ds.string}]),
               more = ReadFun},
     decode_value(S).
 
@@ -60,18 +62,27 @@ decode_opts(Opts) ->
          ?opt(string, ds, Opts)
          , ?opt(name, ds, Opts)
          , ?opt(object, ds, Opts)
+         , ?opt(empty_object, ds, Opts)
+         , ?opt(wrap_array, ds, Opts)
        }.
 
 decode_validate_opts(Opts) when is_map(Opts) ->
      decode_validate_opts(proplists:from_map(Opts));
-decode_validate_opts(Opts) when is_list(Opts) ->
+decode_validate_opts(Opts0) when is_list(Opts0) ->
+    Opts =
+        proplists:normalize(
+          Opts0,
+          [{expand, [{{json2, true}, [{object, {list, struct}},
+                                      {empty_object, []},
+                                      {wrap_array, array},
+                                      {string, string},
+                                      {name, string}]}
+                    ]}]),
     lists:foreach(
       fun ({name, StringType}) -> assert(name, string, StringType);
           ({string, StringType}) -> assert(string, string, StringType);
-          ({object, map}) -> ok;
-          ({object, list}) -> ok;
           ({buffer_size, N}) -> assert(buffer_size, {integer, 0}, N);
-          (_Opt) -> erlang:error(badarg, [_Opt])
+          (_) -> ok
       end,
       Opts),
     Opts;
@@ -108,7 +119,14 @@ decode_object(#ds{object = map} = S) ->
 decode_object(#ds{object = list} = S) ->
     case decode_next(S, S#ds.name) of
         '}' ->
-            [{}];
+            S#ds.empty_object;
+        Token ->
+            decode_object_pair(S, Token, [])
+    end;
+decode_object(#ds{object = {list, Wrap}} = S) ->
+    case decode_next(S, S#ds.name) of
+        '}' ->
+            {Wrap, S#ds.empty_object};
         Token ->
             decode_object_pair(S, Token, [])
     end.
@@ -118,7 +136,8 @@ decode_object_pair(S, {string, Name}, Object) ->
         ':' when S#ds.object == map ->
             Value = decode_value(S),
             decode_object_next(S, Object#{Name => Value});
-        ':' when S#ds.object == list ->
+        ':' when (S#ds.object == list) orelse
+                 (element(1, S#ds.object) == list) ->
             Value = decode_value(S),
             decode_object_next(S, [{Name, Value}|Object]);
         Other ->
@@ -133,6 +152,8 @@ decode_object_next(S, Object) ->
             Object;
         '}' when S#ds.object == list ->
             lists:reverse(Object);
+        '}' when element(1, S#ds.object) == list ->
+            {element(2, S#ds.object), lists:reverse(Object)};
         ',' ->
             decode_object_pair(S, decode_next(S, S#ds.name), Object);
         Other ->
@@ -141,8 +162,10 @@ decode_object_next(S, Object) ->
 
 decode_array(S) ->
     case decode_next(S) of
-        ']' ->
+        ']' when S#ds.wrap_array == undefined ->
             [];
+        ']' ->
+            {S#ds.wrap_array, []};
         Token ->
             Value = decode_value(S, Token),
             decode_array_next(S, [Value])
@@ -150,8 +173,10 @@ decode_array(S) ->
 
 decode_array_next(S, Array) ->
     case decode_next(S) of
-        ']' ->
+        ']' when S#ds.wrap_array == undefined ->
             lists:reverse(Array);
+        ']' ->
+            {S#ds.wrap_array, lists:reverse(Array)};
         ',' ->
             Value = decode_value(S),
             decode_array_next(S, [Value|Array]);
@@ -276,6 +301,8 @@ encode_value(Str, Out, _L, S) when is_binary(Str) ->
 %% Object
 encode_value([{}], Out, _L, S) ->
     emit(<<"{}">>, Out, S);
+encode_value({}, Out, _L, S) ->
+    emit(<<"{}">>, Out, S);
 encode_value({struct, []}, Out, _L, S) ->
     emit(<<"{}">>, Out, S);
 encode_value({struct, Object}, Out, L, S) ->
@@ -288,7 +315,7 @@ encode_value(Object, Out, _L, S) when map_size(Object) =:= 0 ->
     emit(<<"{}">>, Out, S);
 encode_value(Object, Out, L, S) when is_map(Object) ->
     encode_object(Object, Out, L, S);
-encode_value(Object, Out, L, S) when is_tuple(hd(Object)) ->
+encode_value(Object, Out, L, S) when tuple_size(hd(Object)) =:= 2 ->
     encode_object(Object, Out, L, S);
 encode_value(Record, Out, L, #es{records = Records} = S)
   when is_map_key(element(1, Record), Records) ->
@@ -308,7 +335,7 @@ encode_value(Array, Out, L, #es{list_may_be_string = false} = S)
     encode_array(Array, Out, L, S);
 encode_value(Value, Out, L, #es{list_may_be_string = true} = S)
   when is_list(Value) ->
-    case is_string(Value) of
+    case io_lib:printable_list(Value) of
         false ->
             encode_array(Value, Out, L, S);
         true ->
@@ -411,15 +438,6 @@ emit(Str, _Out, #es{io = F}) when is_function(F, 1) ->
     F(Str);
 emit(Str, Out, #es{io = F}) when is_function(F, 2) ->
     F(Str, Out).
-
-is_string([]) ->
-    true;
-is_string([Char|Chars]) when is_integer(Char)
-                             andalso (Char < 127)
-                             andalso (Char > 31) ->
-    is_string(Chars);
-is_string(_) ->
-    false.
 
 record_to_proplist([_Name|Names], [undefined|Values], remove = Undefined) ->
     record_to_proplist(Names, Values, Undefined);

@@ -23,8 +23,9 @@ test1_test() ->
 
 
 test1a_test() ->
-    T = jeysn_ll:init_string([{string,string}],
-                          "\"a\" \"b\" \"c\" \"x1x2x3\" \"atom\" \"bye\""),
+    T = jeysn_ll:init_string(
+          "\"a\" \"b\" \"c\" \"x1x2x3\" \"atom\" \"bye\"",
+          [{string,string}]),
 
     {string,"a"} = jeysn_ll:next_token(T, string),
 
@@ -114,7 +115,7 @@ tokens(Buffer) ->
     tokens([], Buffer).
 
 tokens(Opts, Buffer) ->
-    S = jeysn_ll:init_string(Opts, Buffer),
+    S = jeysn_ll:init_string(Buffer, Opts),
     tokens(S, [], jeysn_ll:next_token(S)).
 
 tokens(_S, Tokens, eof) ->

@@ -47,7 +47,8 @@ s() ->
 prop_number() ->
     ?FORALL(Ns, list(json_number()),
             begin
-                T = jeysn_ll:init_string([[number_to_string(N),$ ]||N <- Ns]),
+                T = jeysn_ll:init_string(
+                      [[number_to_string(N),$\040] || N <- Ns]),
                 same_numbers(T, Ns)
             end).
 
@@ -80,8 +81,8 @@ unicode_bmp() ->
 unicode_sp() ->
     range(16#10000, 16#10FFFF).
 
-valid_utf8_codepoint() ->
-    oneof([unicode_bmp(), unicode_sp()]).
+%valid_utf8_codepoint() ->
+%    oneof([unicode_bmp(), unicode_sp()]).
 
 prop_utf8_escaped_bmp() ->
     ?FORALL(X, unicode_bmp(), verify_escape_u_encoding(X)).
@@ -146,8 +147,8 @@ prop_skip_invalid_escape_sequence() ->
             begin
                 String = lists:flatten([Pre,Seq,Post]),
                 JSON_Value = [$", String, $"],
-%%             io:format("\n~w ~w\n", [String, jeysn_json2:decode(JSON_Value)]),
-                String == jeysn_json2:decode(JSON_Value)
+%%             io:format("\n~w ~w\n", [String, jeysn:decode(JSON_Value,json2)]),
+                String == jeysn:decode(JSON_Value, [json2])
             end).
 
 prop_skip_invalid_escape_u_sequence() ->
@@ -158,8 +159,8 @@ prop_skip_invalid_escape_u_sequence() ->
             begin
                 String = lists:flatten([Pre,Seq,Post]),
                 JSON_Value = [$", String, $"],
-%%             io:format("\n~w ~w\n", [String, jeysn_json2:decode(JSON_Value)]),
-                String == jeysn_json2:decode(JSON_Value)
+%%             io:format("\n~w ~w\n", [String, jeysn:decode(JSON_Value,json2)]),
+                String == jeysn:decode(JSON_Value, json2)
             end).
 
 %%-type json_ws_char() :: 16#20 | 16#09 | 16#0a | 16#0d.
@@ -172,7 +173,7 @@ prop_decode() ->
             begin
                 Str = encode_value(V),
 %%                io:format("\n\n~s\n\n", [Str]),
-                jeysn_json2:decode(Str) == V
+                jeysn:decode(Str, json2) == V
             end).
 
 prop_decode_ws() ->
@@ -182,7 +183,7 @@ prop_decode_ws() ->
                 Str = encode_value(V, WS),
 %%                io:format("\n\n~s\n\n", [Str]),
 %%                io:format("\n~w\n", [Space]),
-                jeysn_json2:decode(Str) == V
+                jeysn:decode(Str, json2) == V
             end).
 
 test_str() ->
@@ -191,7 +192,7 @@ test_str() ->
 prop_test() ->
     ?FORALL(Str, test_str(),
             begin
-                _Term = jeysn_json2:decode(Str),
+                _Term = jeysn:decode(Str, json2),
 %%                io:format("\n\nStr: ~s\nTerm: ~9999p\n\n", [Str, _Term]),
                 true
             end).
@@ -229,7 +230,7 @@ chopped(String, ChunkSize) ->
                 end
         end,
     try
-        jeysn_json2:decode_stream(ReadF)
+        jeysn:decode_stream(ReadF, json2)
     after
         erase(Ref)
     end.
@@ -259,20 +260,20 @@ encode({'array', Array}, WS) ->
 encode({'struct', []}, _) ->
     "{}";
 encode({'struct', Members}, WS) ->
-    [${,$ ,encode_object_members(Members, WS),$ ,$}].
+    [${,$\040,encode_object_members(Members, WS),$\040,$}].
 
 encode_array_items([], _) ->
     "";
 encode_array_items([Item], WS) ->
     encode_value(Item, WS);
 encode_array_items([Item|Items], WS) ->
-    [encode_value(Item, WS),$,,$ ,encode_array_items(Items, WS)].
+    [encode_value(Item, WS),$,,$\040,encode_array_items(Items, WS)].
 
 encode_object_members([], _) ->
     "";
 encode_object_members([{Key,Value}], WS) ->
-    [encode_value(Key, WS),$:,$ ,encode_value(Value, WS)];
+    [encode_value(Key, WS),$:,$\040,encode_value(Value, WS)];
 encode_object_members([{Key,Value}|Members], WS) ->
-    [encode_value(Key, WS),$:,$ ,encode_value(Value, WS),$,,$ ,
+    [encode_value(Key, WS),$:,$\040,encode_value(Value, WS),$,,$\040,
      encode_object_members(Members, WS)].
 

@@ -3,7 +3,6 @@
 -include_lib("eunit/include/eunit.hrl").
 
 files_test() ->
-    application:start(jeysn),
     JSONFiles = json_files("."),
     lists:foreach(
       fun (File) ->
@@ -30,7 +29,6 @@ json_files(Dir) ->
 -record(bar, {boo, baz, bing}).
 
 records_test() ->
-    application:start(jeysn),
     RI = #{foo => record_info(fields, foo)},
 
     R = #foo{d = <<"hello">>},
