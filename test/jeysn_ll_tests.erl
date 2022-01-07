@@ -1,28 +1,8 @@
--module(jeysn_test).
--compile(export_all).
+-module(jeysn_ll_tests).
 
-test() ->
-    try
-        ok = test1(),
-        ok = test1a(),
-        ok = test2a(),
-        ok = test2b(),
-        ok = test2c(),
-        ok = test3(),
-        ok = test_numbers(),
-        ok = test_files(),
-        ok = test_records(),
-        io:format("OK\n", []),
-        erlang:halt(0)
-    catch
-        _Err:_What:_Stack ->
-            io:format("~p: ~p\n~p\n", [_Err, _What, _Stack]),
-            erlang:halt(1)
-    end.
+-include_lib("eunit/include/eunit.hrl").
 
-%% ------------------------------------------------------------------------
-
-test1() ->
+test1_test() ->
     T = jeysn_ll:init_string("\"a\" \"b\" \"c\" \"x1x2x3\" \"atom\" \"bye\""),
 
     {string,"a"} = jeysn_ll:next_token(T, string),
@@ -42,7 +22,7 @@ test1() ->
     ok.
 
 
-test1a() ->
+test1a_test() ->
     T = jeysn_ll:init_string([{string,string}],
                           "\"a\" \"b\" \"c\" \"x1x2x3\" \"atom\" \"bye\""),
 
@@ -64,17 +44,17 @@ test1a() ->
 
 
 
-test2a() ->
+test2a_test() ->
     ['{', {string,<<"foo:bar">>}, ':', 42, '}'] =
         tokens("{ \"foo:bar\" : 42 }"),
     ok.
 
-test2b() ->
+test2b_test() ->
     ['{', {string,[foo|bar]}, ':', 42, '}'] =
         tokens([{string,{atom,$:}}], "{ \"foo:bar\" : 42 }"),
     ok.
 
-test2c() ->
+test2c_test() ->
     ['{', {string,"foo:bar"}, ':', 42, '}'] =
         tokens([{string,string}], "{ \"foo:bar\" : 42 }"),
     ok.
@@ -83,7 +63,7 @@ test2c() ->
 %% UTF-8: 11110000 10011001 10000100 10011110
 
 
-test3() ->
+test3_test() ->
     L =
         [{"\\u0024",          <<16#24>>}                    % CodePoint 0x24
          , {"\\u00a2",        <<16#c2,16#a2>>}              % CodePoint 0xA2
@@ -146,7 +126,7 @@ tokens(S, Tokens, Token) ->
 
 
 
-test_numbers() ->
+numbers_test() ->
     test_integer(max32()),
     test_integer(max31()),
     test_integer(max64()),
@@ -206,76 +186,3 @@ expect_token(String, Expect) ->
     eof = jeysn_ll:next_token(State),
     %%io:format("ok\n", []),
     ok.
-
-test_files() ->
-    JSONFiles = json_files("."),
-    lists:foreach(
-      fun (File) ->
-              Term = jeysn:decode_file(File),
-              String = iolist_to_binary(jeysn:encode(Term)),
-              Term = jeysn:decode(String),
-              ok
-      end, JSONFiles),
-    ok.
-
-json_files(Dir) ->
-    {ok, Files} = file:list_dir(Dir),
-    lists:filter(
-      fun (FileName) ->
-              case lists:reverse(FileName) of
-                  [$n,$o,$s,$j,$.|_] ->
-                      true;
-                  _ ->
-                      false
-              end
-      end, Files).
-
--record(foo, {a = 42, b = false, c = null, d, e}).
--record(bar, {boo, baz, bing}).
-
-test_records() ->
-    RI = #{foo => record_info(fields, foo)},
-
-    R = #foo{d = <<"hello">>},
-
-    <<"{\"a\":42,\"b\":false,\"c\":null,\"d\":\"hello\",\"e\":null}">> =
-        B1 = jeysn:encode(R, [{records, RI}]),
-
-    <<"{\"a\":42,\"b\":false,\"c\":null,\"d\":\"hello\",\"e\":false}">> =
-        B2 = jeysn:encode(R, [{records, RI}, {record_undefined, false}]),
-
-    <<"{\"a\":42,\"b\":false,\"c\":null,\"d\":\"hello\"}">> =
-        B3 = jeysn:encode(R, [{records, RI}, {record_undefined, remove}]),
-
-    DOpts = [{object,list},{name,existing_atom}],
-
-    [{a,42},{b,false},{c,null},{d,<<"hello">>},{e,null}] =
-        jeysn:decode(B1, DOpts),
-
-    [{a,42},{b,false},{c,null},{d,<<"hello">>},{e,false}] =
-        jeysn:decode(B2, DOpts),
-
-    [{a,42},{b,false},{c,null},{d,<<"hello">>}] =
-        jeysn:decode(B3, DOpts),
-
-
-    A = {array,
-         [R
-          , #foo{b=true, c=[1,2,3], d = #bar{boo = <<"boo">>}, e = R}
-          , #bar{boo=1, baz=2, bing=3}
-         ]},
-
-    RI1 = RI#{bar => record_info(fields, bar)},
-
-    B4 = jeysn:encode(A, [{records, RI1}]),
-
-    [[{a,42},{b,false},{c,null},{d,<<"hello">>},{e,null}],
-     [{a,42},{b,true},{c,[1,2,3]},{d,[{boo,<<"boo">>},{baz,null},{bing,null}]},
-      {e,[{a,42},{b,false},{c,null},{d,<<"hello">>},{e,null}]}],
-     [{boo,1},{baz,2},{bing,3}]] =
-        Term = jeysn:decode(B4, DOpts),
-
-    B4 = jeysn:encode(Term),
-
-    ok.
-
