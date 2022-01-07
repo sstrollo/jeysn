@@ -14,7 +14,7 @@ proper: rebar3
 	./rebar3 proper -n 5000
 
 tests: rebar3
-	./rebar3 do compile, dialyzer
+	./rebar3 dialyzer
 	./rebar3 eunit
 	./rebar3 proper -n 500
 

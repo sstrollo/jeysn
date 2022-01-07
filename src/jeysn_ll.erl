@@ -2,16 +2,7 @@
 %% Copyright Sebastian Strollo <seb@strollo.org>
 %% SPDX-License-Identifier: Apache-2.0
 %%
-
-%%
-%%  The JavaScript Object Notation (JSON) Data Interchange Format
-%%
-%%  https://tools.ietf.org/html/rfc7159
-%%
-%%
-%%  JSON Encoding of Data Modeled with YANG
-%%
-%%  https://tools.ietf.org/html/draft-ietf-netmod-yang-json-02
+%% The low-level tokenizer (implemented as a NIF).
 %%
 -module(jeysn_ll).
 

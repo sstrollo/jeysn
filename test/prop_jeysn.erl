@@ -230,7 +230,7 @@ chopped(String, ChunkSize) ->
                 end
         end,
     try
-        jeysn:decode_stream(ReadF, json2)
+        jeysn:decode_io(ReadF, json2)
     after
         erase(Ref)
     end.

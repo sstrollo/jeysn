@@ -6,8 +6,26 @@
 
 -export([decode/1, decode/2]).
 -export([decode_file/1, decode_file/2]).
--export([decode_stream/1, decode_stream/2]).
+-export([decode_io/1, decode_io/2]).
+
 -export([encode/1, encode/2]).
+-export([encode_file/2, encode_file/3]).
+-export([encode_io/1, encode_io/2, encode_io/3]).
+
+%% ------------------------------------------------------------------------
+
+-type decode_options() :: list() | map().
+
+-type read_fun() ::
+        fun (() -> {'ok', iodata()}
+                       | eof
+                       | {'error', term()}
+                       ).
+
+-type encode_options() :: list() | map().
+
+-type write_fun() ::
+        fun ((iodata()) -> any()) | fun ((iodata(), term()) -> term()).
 
 %% ------------------------------------------------------------------------
 
@@ -23,17 +41,29 @@
          }).
 
 
-decode(Str) ->
-    decode(Str, []).
-decode(Str, Opts) ->
-    S0 = decode_opts(decode_validate_opts(Opts)),
-    S = S0#ds{tokenizer = jeysn_ll:init_string(Str, [{string, S0#ds.string}])},
+-spec decode(iodata()) -> term().
+%% @equiv decode(String, [])
+decode(String) ->
+    decode(String, []).
+
+-spec decode(iodata(), decode_options()) -> term().
+%% @doc Decode a JSON value and return its Erlang representation.
+decode(String, Options) ->
+    S0 = decode_opts(decode_validate_opts(Options)),
+    S = S0#ds{tokenizer =
+                  jeysn_ll:init_string(String, [{string, S0#ds.string}])},
     decode_value(S).
 
+-spec decode_file(iodata()) -> term().
+%% @equiv decode_file(ReadFun, [])
 decode_file(FileName) ->
     decode_file(FileName, []).
-decode_file(FileName, Opts0) ->
-    Opts = decode_validate_opts(Opts0),
+
+-spec decode_file(iodata(), decode_options()) -> term().
+%% @doc Decode a JSON value in file FileName and return its Erlang
+%% representation.
+decode_file(FileName, Options) ->
+    Opts = decode_validate_opts(Options),
     BufSz = proplists:get_value(buffer_size, Opts, 64*1024), % 8192,
     {ok, Fd} = file:open(FileName, [read,binary,raw]),
     S0 = decode_opts(Opts),
@@ -42,13 +72,21 @@ decode_file(FileName, Opts0) ->
               more = fun () -> file:read(Fd, BufSz) end},
     decode_value(S).
 
-decode_stream(ReadFun) ->
-    decode_stream(ReadFun, []).
-decode_stream(ReadFun, Opts) ->
-    S0 = decode_opts(decode_validate_opts(Opts)),
+-spec decode_io(read_fun()) -> term().
+%% @equiv decode_io(ReadFun, [])
+decode_io(ReadFun) ->
+    decode_io(ReadFun, []).
+
+-spec decode_io(read_fun(), decode_options()) -> term().
+%% @doc Decode a JSON value that is returned by (repeatedly) invoking
+%% ReadFun() and return its Erlang representation.
+decode_io(ReadFun, Options) ->
+    S0 = decode_opts(decode_validate_opts(Options)),
     S = S0#ds{tokenizer = jeysn_ll:init([{string, S0#ds.string}]),
               more = ReadFun},
     decode_value(S).
+
+%% ------------------------------------------------------------------------
 
 %-define(default(RECORD, ITEM), (#RECORD{})#RECORD.ITEM).
 -define(default(RECORD, ITEM), element(#RECORD.ITEM, #RECORD{})).
@@ -88,7 +126,6 @@ decode_validate_opts(Opts0) when is_list(Opts0) ->
     Opts;
 decode_validate_opts(Opt) ->
     decode_validate_opts([Opt]).
-
 
 %% ------------------------------------------------------------------------
 
@@ -231,10 +268,39 @@ get_position(#ds{tokenizer = T, filename = File}) ->
 
 encode(Term) ->
     encode(Term, []).
-
-encode(Term, Opts) ->
-    S = encode_opts(encode_validate_opts(Opts)),
+encode(Term, Options) ->
+    S = encode_opts(encode_validate_opts(Options)),
     encode_value_0(Term, <<>>, S).
+
+encode_file(Term, FileName) ->
+    encode_file(Term, FileName, []).
+encode_file(Term, FileName, Options) ->
+    {ok, Fd} = file:open(FileName, [raw,binary,write]),
+    try
+        WriteF = fun (Data) -> ok = file:write(Fd, Data) end,
+        encode(Term, [{io, WriteF}|Options])
+    after
+        file:close(Fd)
+    end.
+
+encode_io(Term) ->
+    encode_io(Term, standard_io, []).
+
+encode_io(Term, Options) ->
+    encode_io(Term, standard_io, Options).
+
+-spec encode_io(term(), io:device() | write_fun(), encode_options()) -> any().
+encode_io(Term, standard_io, Options) ->
+    encode(Term, [{io, fun io:put_chars/1}|Options]);
+encode_io(Term, WriteF, Options) when is_function(WriteF, 1) ->
+    encode(Term, [{io, WriteF}|Options]);
+encode_io(Term, WriteF, Options) when is_function(WriteF, 2) ->
+    encode(Term, [{io, WriteF}|Options]);
+encode_io(Term, IoDevice, Options) ->
+    encode(Term,
+           [{io, fun (Data) -> io:put_chars(IoDevice, Data) end} | Options]).
+
+%% ------------------------------------------------------------------------
 
 encode_opts(Opts) ->
     #es{
@@ -273,6 +339,8 @@ encode_validate_opts(Opts0) when is_list(Opts0) ->
     Opts;
 encode_validate_opts(Opt) ->
     encode_validate_opts([Opt]).
+
+%% ------------------------------------------------------------------------
 
 encode_value_0(Term, Out0, S) ->
     Out1 = encode_value(Term, Out0, 0, S),
