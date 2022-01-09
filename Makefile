@@ -22,7 +22,7 @@ erl: rebar3
 	./rebar3 shell
 
 rebar3:
-	curl -O "https://s3.amazonaws.com/$@/$@" && chmod +x $@
+	curl -Os "https://s3.amazonaws.com/$@/$@" && chmod +x $@
 
 .PHONY: all eunit proper tests erl
 

@@ -15,6 +15,7 @@
  */
 #include <stdio.h>
 #include <string.h>
+#include <stdint.h>
 #include <ctype.h>
 
 #include "erl_nif.h"
@@ -144,6 +145,8 @@ static ERL_NIF_TERM make_json_token(ErlNifEnv *env, jeysn_state_t *ejs,
         return enif_make_tuple2(env, enif_make_copy(env, am_string), string);
     }
     }
+    /* NOT REACHED */
+    return enif_make_badarg(env);
 }
 
 static ERL_NIF_TERM make_position(ErlNifEnv* env, jeysn_state_t *ejs)
