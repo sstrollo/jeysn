@@ -170,7 +170,7 @@ decode_object(#ds{object = map} = S) ->
         '}' ->
             #{};
         Token ->
-            decode_object_pair(S, Token, #{})
+            decode_object_pair(S, Token, [])
     end;
 decode_object(#ds{object = list} = S) ->
     case decode_next(S, S#ds.name) of
@@ -189,11 +189,7 @@ decode_object(#ds{object = {list, Wrap}} = S) ->
 
 decode_object_pair(S, {string, Name}, Object) ->
     case decode_next(S) of
-        ':' when S#ds.object == map ->
-            Value = decode_value(S),
-            decode_object_next(S, Object#{Name => Value});
-        ':' when (S#ds.object == list) orelse
-                 (element(1, S#ds.object) == list) ->
+        ':' ->
             Value = decode_value(S),
             decode_object_next(S, [{Name, Value}|Object]);
         Other ->
@@ -205,7 +201,7 @@ decode_object_pair(S, Other, _Object) ->
 decode_object_next(S, Object) ->
     case decode_next(S) of
         '}' when S#ds.object == map ->
-            Object;
+            maps:from_list(Object);
         '}' when S#ds.object == list ->
             lists:reverse(Object);
         '}' when element(1, S#ds.object) == list ->
