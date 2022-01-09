@@ -16,11 +16,23 @@ jeysn() ->
     Modules = [jeysn],
     r(standard_io, Modules, files()).
 
+%% Decode with objects represented maps
 o() ->
     other(
       [jeysn
-       , {jsx, fun (Bin) -> jsx:decode(Bin, [return_maps]) end}
        , {eyaml, fun (Bin) -> eyaml:parse(Bin) end}
+       , {jsx, fun (Bin) -> jsx:decode(Bin, [{return_maps,true}]) end}
+       , jsone
+      ]).
+
+%% Decode with objects represented as lists
+l() ->
+    other(
+      [{jeysn, fun (Bin) -> jeysn:decode(Bin, [{object,list}]) end}
+       , {eyaml, fun (Bin) -> eyaml:parse(Bin, #{mapping_as_list => true}) end}
+       , {jsx, fun (Bin) -> jsx:decode(Bin, [{return_maps,false}]) end}
+       , {jsone,
+          fun (Bin) -> jsone:decode(Bin, [{object_format, proplist}]) end}
       ]).
 
 other(Modules) ->

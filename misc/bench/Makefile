@@ -11,15 +11,21 @@ JSON  = canada.json citm_catalog.json \
 
 # ------------------------------------------------------------------------
 
+ERL_LIBS := ../../_build/default/lib/jeysn:./deps/deps:$(ERL_LIBS)
+
 all: $(BEAMS) $(JSON)
 
 json: $(JSON)
 
 erl: $(BEAMS) $(JSON)
-	env ERL_LIBS=`cd ../../_build/default/lib/jeysn && pwd`:$(ERL_LIBS) JSON="$(JSON)" $(ERL)
+	env ERL_LIBS=$(ERL_LIBS) JSON="$(JSON)" $(ERL)
 
 bench:  $(BEAMS) $(JSON)
-	env ERL_LIBS=`cd ../../_build/default/lib/jeysn && pwd`:$(ERL_LIBS) JSON="$(JSON)" $(ERL) -noshell -s bench d -s init stop
+	@env ERL_LIBS=$(ERL_LIBS) JSON="$(JSON)" $(ERL) \
+		-noshell -s bench o -s init stop
+	@echo ""
+	@env ERL_LIBS=$(ERL_LIBS) JSON="$(JSON)" $(ERL) \
+		-noshell -s bench l -s init stop
 
 .PHONY: all json erl
 
@@ -59,3 +65,13 @@ deepobject%.json:
 
 clean:
 	rm -f  *.beam *.json
+
+# ------------------------------------------------------------------------
+
+deps: deps/erlang.mk
+	cd deps && $(MAKE) deps
+
+.PHONY: deps
+
+deps/erlang.mk:
+	cd $(dir $@) && curl -Os https://erlang.mk/erlang.mk

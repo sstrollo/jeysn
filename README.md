@@ -66,6 +66,10 @@ The default is to return lists
 - Decide on the API (function names, returns - wrapped vs exceptions)
   and release version 1.0
 
+- Note: trailing text after a complete JSON value is currently ignored
+  (will add possibility to return trailing text in future, see
+  streaming below)
+
 - Optionally allow some slack in the JSON input (misplaced commas,
   single quoted strings, barewords as names)
 
@@ -74,7 +78,9 @@ The default is to return lists
   with useful API:s (including possibility to return remaining
   characters)
 
-- Event based pluggable callback API
+- Add an event based pluggable callback API
+
+- Add a top-level re-entrant decode API (for when you need the control loop
 
 - Provide size limitations (make it possible to specify the maximum
   size of strings, objects, and arrays).

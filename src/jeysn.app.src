@@ -1,7 +1,7 @@
-{application,jeysn,
- [{description,"Erlang JSON interface"},
-  {vsn,"0.1"},
-  {modules,[]},
+{application, jeysn,
+ [{description, "Erlang JSON interface"},
+  {vsn, "0.9"},
+  {modules, []},
   {registered, []},
   {env, []},
-  {applications,[kernel,stdlib]}]}.
+  {applications, [kernel, stdlib]}]}.

@@ -6,7 +6,7 @@
 
 -export([decode/1, decode/2]).
 -export([decode_file/1, decode_file/2]).
--export([decode_io/1, decode_io/2]).
+-export([decode_io/0, decode_io/1, decode_io/2]).
 
 -export([encode/1, encode/2]).
 -export([encode_file/2, encode_file/3]).
@@ -14,7 +14,10 @@
 
 %% ------------------------------------------------------------------------
 
--type decode_options() :: list() | map().
+-type decode_options() :: [decode_option()] | map().
+
+%% FIXME TBD
+-type decode_option() :: atom() | {atom(), term()}.
 
 -type read_fun() ::
         fun (() -> {'ok', iodata()}
@@ -22,7 +25,10 @@
                        | {'error', term()}
                        ).
 
--type encode_options() :: list() | map().
+-type encode_options() :: [encode_option()] | map().
+
+%% FIXME TBD
+-type encode_option() :: atom() | {atom(), term()}.
 
 -type write_fun() ::
         fun ((iodata()) -> any()) | fun ((iodata(), term()) -> term()).
@@ -71,6 +77,19 @@ decode_file(FileName, Options) ->
               filename = FileName,
               more = fun () -> file:read(Fd, BufSz) end},
     decode_value(S).
+
+-spec decode_io() -> term().
+%% @doc prompt for text and parse it as a JSON object
+decode_io() ->
+    decode_io(
+      fun () ->
+              case io:get_line("jeysn> ") of
+                  "\n" -> eof;
+                  eof -> eof;
+                  {error, _Err} = Error -> Error;
+                  String -> {ok, String}
+              end
+      end, []).
 
 -spec decode_io(read_fun()) -> term().
 %% @equiv decode_io(ReadFun, [])
@@ -290,15 +309,20 @@ encode_io(Term, Options) ->
     encode_io(Term, standard_io, Options).
 
 -spec encode_io(term(), io:device() | write_fun(), encode_options()) -> any().
-encode_io(Term, standard_io, Options) ->
+encode_io(Term, standard_io, Options) when is_list(Options) ->
     encode(Term, [{io, fun io:put_chars/1}|Options]);
-encode_io(Term, WriteF, Options) when is_function(WriteF, 1) ->
+encode_io(Term, WriteF, Options) when is_list(Options) andalso
+                                      is_function(WriteF, 1) ->
     encode(Term, [{io, WriteF}|Options]);
-encode_io(Term, WriteF, Options) when is_function(WriteF, 2) ->
+encode_io(Term, WriteF, Options) when is_list(Options) andalso
+                                      is_function(WriteF, 2) ->
     encode(Term, [{io, WriteF}|Options]);
-encode_io(Term, IoDevice, Options) ->
+encode_io(Term, IoDevice, Options) when is_list(Options) ->
     encode(Term,
-           [{io, fun (Data) -> io:put_chars(IoDevice, Data) end} | Options]).
+           [{io, fun (Data) -> io:put_chars(IoDevice, Data) end} | Options]);
+encode_io(Term, Io, Option) ->
+    encode_io(Term, Io, [Option]).
+
 
 %% ------------------------------------------------------------------------
 
@@ -321,7 +345,7 @@ encode_validate_opts(Opts0) when is_list(Opts0) ->
           Opts0,
           [{expand, [{{space,true}, [{space,1}]}
                      , {{indent, true}, [{indent, 1}]}
-                     , {pretty, [{space, 1}, {indent, 2}]}
+                     , {pretty, [{space, 1}, {indent, 2}, {nl, true}]}
                     ]}]),
     lists:foreach(
       fun ({space, N}) -> assert(space, integer, N);
@@ -365,6 +389,8 @@ encode_value(N, Out, _L, S) when is_float(N) ->
 encode_value(Str, Out, _L, S) when is_atom(Str) ->
     encode_string(Str, Out, S);
 encode_value(Str, Out, _L, S) when is_binary(Str) ->
+    encode_string(Str, Out, S);
+encode_value({string, Str}, Out, _L, S) ->
     encode_string(Str, Out, S);
 %% Object
 encode_value([{}], Out, _L, S) ->
