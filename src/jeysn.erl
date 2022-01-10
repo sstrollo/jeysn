@@ -150,10 +150,10 @@ decode_validate_opts(Opts0) when is_list(Opts0) ->
                                       {wrap_array, array},
                                       {string, string},
                                       {name, string}]}
-                     , {{jsx_list, true}, [{object, list},
-                                           {empty_object, [{}]}]}
-                     , {{jsone_list, true}, [{object, {list, {}}},
-                                             {empty_object, []}]}
+                     , {{object, proplist},
+                        [{object, list}, {empty_object, [{}]}]}
+                     , {{object, tuple},
+                        [{object, {list, {}}}, {empty_object, []}]}
                     ]}]),
     lists:foreach(
       fun ({name, StringType}) -> assert(name, string, StringType);
