@@ -1,16 +1,11 @@
 
-ERL  = erl
-ERLC = erlc
-
-BEAMS = $(patsubst src/%.erl,ebin/%.beam,$(wildcard src/*.erl))
-
 all: rebar3
 	./rebar3 compile
 
-docs:
+docs: rebar3
 	./rebar3 edoc
 
-eunit:
+eunit: rebar3
 	./rebar3 eunit
 
 proper: rebar3
@@ -30,19 +25,8 @@ rebar3:
 .PHONY: all docs eunit proper tests erl
 
 
-make: $(BEAMS)
-	cd c_src && $(MAKE)
-
-.PHONY: make
-
-
-ebin/%.beam: src/%.erl
-	@mkdir -p $(dir $@)
-	$(ERLC) -o $(dir $@) $<
-
-
 clean:
 	cd c_src && $(MAKE) $@
-	rm -rf ebin priv _build rebar.lock
+	rm -rf ebin priv _build
 
 .PHONY: clean

@@ -7,7 +7,8 @@ PRINT_ERTS_DIR  = io:format("~ts/erts-~ts/include",
 PRINT_ERTS_DIR +=           [code:root_dir(), erlang:system_info(version)]),
 PRINT_ERTS_DIR += init:stop(0).
 
-ERTS_INCLUDE_DIR ?= $(shell erl -noinput -eval '$(PRINT_ERTS_DIR)')
+ERL              ?= erl
+ERTS_INCLUDE_DIR ?= $(shell $(ERL) -noinput -eval '$(PRINT_ERTS_DIR)')
 
 UNAME_SYS := $(shell uname -s)
 ifeq ($(UNAME_SYS), Darwin)
@@ -36,6 +37,11 @@ jeysn_ll.o: json.h
 
 %.o: %.c
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c $<
+
+vars:
+	@echo "CC       $(CC)"
+	@echo "CFLAGS   $(CFLAGS)"
+	@echo "LDFLAGS  $(LDFLAGS)"
 
 clean:
 	rm -f $(TARGET) $(OBJS)
