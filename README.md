@@ -286,10 +286,6 @@ still shifting around a bit.
 
 - Make sure jeysn is usable from Elixir
 
-- Note: trailing text after a complete JSON value is currently ignored
-  (will add possibility to return trailing text in future, see
-  streaming below)
-
 - Optionally allow some slack in the JSON input (misplaced commas,
   single quoted strings, barewords as names)
 

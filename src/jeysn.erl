@@ -60,6 +60,7 @@
           , empty_object = [{}]
           , wrap_array = undefined % Term
           , more = fun () -> eof end
+          , trailing_data = error        % 'error', 'return', 'ignore'
          }).
 
 
@@ -74,7 +75,7 @@ decode(String, Options) ->
     S0 = decode_opts(decode_validate_opts(Options)),
     S = S0#ds{tokenizer =
                   jeysn_ll:init_string(String, [{string, S0#ds.string}])},
-    decode_value(S).
+    decode_value_0(S).
 
 -spec decode_file(iodata()) -> json_term().
 %% @equiv decode_file(ReadFun, [])
@@ -92,7 +93,7 @@ decode_file(FileName, Options) ->
     S = S0#ds{tokenizer = jeysn_ll:init([{string, S0#ds.string}]),
               filename = FileName,
               more = fun () -> file:read(Fd, BufSz) end},
-    decode_value(S).
+    decode_value_0(S).
 
 -spec decode_io() -> json_term().
 %% @doc prompt for text and parse it as a JSON object
@@ -119,7 +120,7 @@ decode_io(ReadFun, Options) ->
     S0 = decode_opts(decode_validate_opts(Options)),
     S = S0#ds{tokenizer = jeysn_ll:init([{string, S0#ds.string}]),
               more = ReadFun},
-    decode_value(S).
+    decode_value_0(S).
 
 %% ------------------------------------------------------------------------
 
@@ -137,6 +138,7 @@ decode_opts(Opts) ->
          , ?opt(object, ds, Opts)
          , ?opt(empty_object, ds, Opts)
          , ?opt(wrap_array, ds, Opts)
+         , ?opt(trailing_data, ds, Opts)
        }.
 
 decode_validate_opts(Opts) when is_map(Opts) ->
@@ -165,6 +167,35 @@ decode_validate_opts(Opts0) when is_list(Opts0) ->
     Opts;
 decode_validate_opts(Opt) ->
     decode_validate_opts([Opt]).
+
+%% ------------------------------------------------------------------------
+
+decode_value_0(S) ->
+    Value = decode_value(S),
+    decode_trailing_data(S, Value).
+
+decode_trailing_data(#ds{trailing_data = ignore}, Value) ->
+    Value;
+decode_trailing_data(#ds{trailing_data = return} = S, Value) ->
+    {ok, Value, jeysn_ll:get_remaining_data(S#ds.tokenizer)};
+decode_trailing_data(#ds{trailing_data = error} = S, Value) ->
+    case jeysn_ll:get_remaining_data(S#ds.tokenizer) of
+        eof ->
+            Value;
+        <<>> ->
+            %% There is no more non-whitespace data, but the read
+            %% function has not yet returned eof, continue invoking it
+            %% until we either get some data or eof
+            case decode_more(S) of
+                ok ->
+                    decode_trailing_data(S, Value);
+                Error ->
+                    Error
+            end;
+        Data ->
+            {{_, Line, Col}, _, _} = jeysn_ll:get_position(S#ds.tokenizer),
+            decode_error(Data, [eof], S#ds.filename, Line, Col)
+    end.
 
 %% ------------------------------------------------------------------------
 
@@ -267,16 +298,11 @@ decode_next(S) ->
 decode_next(S, StrFmt) ->
     case jeysn_ll:next_token(S#ds.tokenizer, StrFmt) of
         more ->
-            case (S#ds.more)() of
-                {ok, Data} ->
-                    jeysn_ll:data(S#ds.tokenizer, Data),
+            case decode_more(S) of
+                ok ->
                     decode_next(S, StrFmt);
-                eof ->
-                    jeysn_ll:eof(S#ds.tokenizer),
-                    decode_next(S, StrFmt);
-                {error, _} = _Err ->
-                    {error, more_error,
-                     jeysn_ll:get_position(S#ds.tokenizer)}
+                {error, _, _} = Error ->
+                    Error
             end;
         {number, IntegerBinary} ->
             binary_to_integer(IntegerBinary);
@@ -284,15 +310,27 @@ decode_next(S, StrFmt) ->
             TokenOrErrorOrEOF
     end.
 
-decode_error(S, Got, Expected) ->
-    {File, Line, Col} = get_position(S),
+decode_more(S) ->
+    case (S#ds.more)() of
+        {ok, Data} ->
+            jeysn_ll:data(S#ds.tokenizer, Data);
+        eof ->
+            jeysn_ll:eof(S#ds.tokenizer);
+        {error, _} = _Err ->
+            {error, more_error, jeysn_ll:get_position(S#ds.tokenizer)}
+    end.
+
+-spec decode_error(#ds{}, any(), any()) -> no_return().
+decode_error(#ds{tokenizer = T, filename = File}, Got, Expected) ->
+    {_, Line, Col} = jeysn_ll:get_token_position(T),
+    decode_error(Got, Expected, File, Line, Col).
+
+-spec decode_error(any(), any(), string(),
+                   non_neg_integer(), non_neg_integer()) -> no_return().
+decode_error(Got, Expected, File, Line, Col) ->
     io:format("~s:~w:~w: Error: got ~p expected: ~w\n",
               [File, Line, Col, Got, Expected]),
     erlang:error(syntax).
-
-get_position(#ds{tokenizer = T, filename = File}) ->
-    {_, Line, Col} = jeysn_ll:get_token_position(T),
-    {File, Line, Col}.
 
 %% ------------------------------------------------------------------------
 

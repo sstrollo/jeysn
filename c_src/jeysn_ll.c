@@ -304,6 +304,26 @@ get_token_position(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
                             enif_make_uint(env, ejs->js.token.position.column));
 }
 
+static ERL_NIF_TERM
+get_remaining_data(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    ERL_NIF_TERM buf;
+    size_t sz = 0;
+    jeysn_state_t *ejs = NULL;
+    if (!get_jeysn_state_t(env, argv[0], &ejs)) {
+        return enif_make_badarg(env);
+    }
+    if (ejs->js.buf.buf) {
+        json_skip_ws(&ejs->js);
+        sz = ejs->js.buf.stop - ejs->js.buf.ptr;
+    }
+    if (sz == 0 && ejs->js.eof) {
+        return enif_make_copy(env, am_eof);
+    }
+    memcpy(enif_make_new_binary(env, sz, &buf), ejs->js.buf.ptr, sz);
+    return buf;
+}
+
 static ERL_NIF_TERM debug(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
     ERL_NIF_TERM buf1, buf2;
@@ -441,6 +461,7 @@ static ErlNifFunc nif_funcs[] = {
     , {"data", 2, data}
     , {"get_position", 1, get_position}
     , {"get_token_position", 1, get_token_position}
+    , {"get_remaining_data", 1, get_remaining_data}
     , {"debug", 1, debug}
     , {"escape_string", 1, escape_string}
 };

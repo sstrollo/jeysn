@@ -569,6 +569,19 @@ not_an_integer:
 #define is_json_ws(C) (((C) == 0x20) || ((C) == 0x09) || \
                        ((C) == 0x0a) || ((C) == 0x0d))
 
+/* Forward the pointers in jsp past any whitespace */
+void json_skip_ws(json_state_t *jsp)
+{
+    uchar *p = jsp->buf.ptr;
+    uchar *stop = jsp->buf.stop;
+
+    for (p=jsp->buf.ptr; p && (p < stop) && is_json_ws(*p); p++) {
+        if (*p == 0x0a) nl(jsp);
+    }
+    if (p) update_position(jsp, p);
+    return;
+}
+
 json_result_t json_next_token(json_state_t *jsp)
 {
     uchar *p = jsp->buf.ptr;

@@ -187,3 +187,45 @@ expect_token(String, Expect) ->
     eof = jeysn_ll:next_token(State),
     %%io:format("ok\n", []),
     ok.
+
+remaining1_test() ->
+    S = jeysn_ll:init_string(<<"   {  }     ">>),
+
+    '{' = jeysn_ll:next_token(S),
+
+    {{4,1,4},<<"   {  }     ">>,<<"  }     ">>} =
+        jeysn_ll:debug(S),
+
+    '}' = jeysn_ll:next_token(S),
+
+    {{7,1,7},<<"   {  }     ">>,<<"     ">>} =
+        jeysn_ll:debug(S),
+
+    eof = jeysn_ll:get_remaining_data(S),
+    {error, eof} = jeysn_ll:data(S, <<"42">>),
+    ok.
+
+remaining2_test() ->
+    S = jeysn_ll:init(),
+    <<>> = jeysn_ll:get_remaining_data(S),
+    jeysn_ll:data(S, <<"   {  }     ">>),
+    '{' = jeysn_ll:next_token(S),
+    {{4,1,4},<<"   {  }     ">>,<<"  }     ">>} = jeysn_ll:debug(S),
+    '}' = jeysn_ll:next_token(S),
+    {{7,1,7},<<"   {  }     ">>,<<"     ">>} = jeysn_ll:debug(S),
+    <<>> = jeysn_ll:get_remaining_data(S),
+    ok = jeysn_ll:data(S, <<"  42 ">>),
+    <<"42 ">> = jeysn_ll:get_remaining_data(S),
+    42 = jeysn_ll:next_token(S),
+    <<>> = jeysn_ll:get_remaining_data(S),
+    jeysn_ll:eof(S),
+    eof = jeysn_ll:get_remaining_data(S),
+    ok.
+
+remaining_eof_test() ->
+    S = jeysn_ll:init(),
+    <<>> = jeysn_ll:get_remaining_data(S),
+    ok = jeysn_ll:eof(S),
+    {error, eof} = jeysn_ll:data(S, <<"42">>),
+    eof = jeysn_ll:get_remaining_data(S),
+    ok.

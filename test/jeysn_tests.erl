@@ -73,3 +73,16 @@ records_test() ->
     B4 = jeysn:encode(Term),
 
     ok.
+
+trailing_test() ->
+    Data = <<"[1] 42">>,
+
+    {'EXIT', {syntax, _}} = (catch jeysn:decode(Data)),
+
+    [1] = jeysn:decode(Data, [{trailing_data, ignore}]),
+
+    {ok, [1], <<"42">>} = jeysn:decode(Data, [{trailing_data, return}]),
+
+    {ok, [1], eof} = jeysn:decode(<<"[ 1 ]    ">>, [{trailing_data, return}]),
+
+    ok.

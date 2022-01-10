@@ -8,7 +8,8 @@
 
 -export([init/0, init/1, init_string/1, init_string/2]).
 -export([data/2, eof/1]).
--export([get_position/1, get_token_position/1, next_token/1, next_token/2]).
+-export([get_position/1, get_token_position/1, get_remaining_data/1]).
+-export([next_token/1, next_token/2]).
 
 -export([encode_string/1, escape_string/1]).
 
@@ -56,13 +57,17 @@ init_string(String, Options) ->
     eof(S),
     S.
 
--spec data(jeysn_tokenizer(), iodata()|'eof') -> 'ok'.
+-spec data(jeysn_tokenizer(), iodata()|'eof') -> 'ok' | {'error', 'eof'}.
+%% @doc Add more iodata to the tokenizer. To indicate that there is no
+%% more data to be found use the atom 'eof' as data. Returns {'error',
+%% 'eof'} if the Tokenizer is already in eof state.
 data(_, _Data) ->
     nif_only().
 
 -spec eof(jeysn_tokenizer()) -> 'ok'.
-eof(State) ->
-    data(State, 'eof').
+%% @equiv data(Tokenizer, 'eof')
+eof(Tokenizer) ->
+    data(Tokenizer, 'eof').
 
 -type json_token() :: '[' | '{' | '}' | ']' | ':' | ','
                     | 'false' | 'null' | 'true'
@@ -81,16 +86,16 @@ eof(State) ->
                       | 'more'
                       | 'eof'
                       .
-next_token(State, StringFormat) ->
-    next_token_nif(State, string_format_internal(StringFormat)).
+next_token(Tokenizer, StringFormat) ->
+    next_token_nif(Tokenizer, string_format_internal(StringFormat)).
 
-next_token(State) ->
-    next_token_nif(State).
+next_token(Tokenizer) ->
+    next_token_nif(Tokenizer).
 
-next_token_nif(_State) ->
+next_token_nif(_Tokenizer) ->
     nif_only().
 
-next_token_nif(_State, _InternalStringFormat) ->
+next_token_nif(_Tokenizer, _InternalStringFormat) ->
     nif_only().
 
 string_format_internal({Format, SplitChar}) when SplitChar >= 0,
@@ -108,12 +113,18 @@ string_format_internal('existing_atom') -> 3.
 -spec get_position(jeysn_tokenizer()) ->
                           {position(), Before::binary(), After::binary()}.
 %% @doc Return the current position of the tokenizer.
-get_position(_State) ->
+get_position(_Tokenizer) ->
     nif_only().
 
 -spec get_token_position(jeysn_tokenizer()) -> position().
 %% @doc Return the position of the latest returned token.
-get_token_position(_State) ->
+get_token_position(_Tokenizer) ->
+    nif_only().
+
+-spec get_remaining_data(jeysn_tokenizer()) -> binary() | 'eof'.
+%% @doc Return any remaining data as a binary. If there is no data and
+%% eof is set then the atom 'eof' is returned.
+get_remaining_data(_Tokenizer) ->
     nif_only().
 
 debug(_x) ->

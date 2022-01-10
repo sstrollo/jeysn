@@ -138,6 +138,8 @@ extern void json_state_add_buffer(json_state_t *jsp, void *p, size_t sz);
 
 extern void json_state_set_eof(json_state_t *jsp);
 
+extern void json_skip_ws(json_state_t *jsp);
+
 extern json_result_t json_next_token(json_state_t *jsp);
 
 extern int json_string_escape_size(uchar *start, size_t size, size_t *newsize);
