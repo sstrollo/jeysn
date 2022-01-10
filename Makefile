@@ -7,6 +7,9 @@ BEAMS = $(patsubst src/%.erl,ebin/%.beam,$(wildcard src/*.erl))
 all: rebar3
 	./rebar3 compile
 
+docs:
+	./rebar3 edoc
+
 eunit:
 	./rebar3 eunit
 
@@ -24,7 +27,7 @@ erl: rebar3
 rebar3:
 	curl -Os "https://s3.amazonaws.com/$@/$@" && chmod +x $@
 
-.PHONY: all eunit proper tests erl
+.PHONY: all docs eunit proper tests erl
 
 
 make: $(BEAMS)

@@ -14,27 +14,43 @@
 
 %% ------------------------------------------------------------------------
 
--type decode_options() :: [decode_option()] | map().
+-type decode_options() :: [decode_option()] | decode_option() | map().
+%% Options to the decode functions. When given as a map they will
+%% first be converted to a property list.
 
-%% FIXME TBD
 -type decode_option() :: atom() | {atom(), term()}.
+%% TODO: document all decode options
 
 -type read_fun() ::
-        fun (() -> {'ok', iodata()}
-                       | eof
-                       | {'error', term()}
-                       ).
+        fun (() ->
+                 {'ok', iodata()}
+                 | eof
+                 | {'error', any()}
+            ).
+%% A function that reads more data when needed by the JSON decoder.
 
--type encode_options() :: [encode_option()] | map().
+-type encode_options() :: [encode_option()] | encode_option() | map().
+%% Options to the encode functions. When given as a map they will
+%% first be converted to a property list.
 
-%% FIXME TBD
 -type encode_option() :: atom() | {atom(), term()}.
+%% TODO: document all decode options
 
--type write_fun() ::
-        fun ((iodata()) -> any()) | fun ((iodata(), term()) -> term()).
+-type write_fun() :: write_fun1() | write_fun2().
+
+-type write_fun1() :: fun ((iodata()) -> any()).
+%% Function that should write data emitted by the encoder.
+
+-type write_fun2() :: fun ((iodata(), term()) -> term()).
+%% Function that should write data emitted by the encoder. The second
+%% argument is the term that write_fun2() returned on the previous
+%% invocation.
+
+-type json_term() :: any().
+%% An Erlang term representing a JSON value.
+%% TODO: better spec
 
 %% ------------------------------------------------------------------------
-
 -record(ds, {
           tokenizer
           , filename = <<"-">>
@@ -47,12 +63,12 @@
          }).
 
 
--spec decode(iodata()) -> term().
+-spec decode(iodata()) -> json_term().
 %% @equiv decode(String, [])
 decode(String) ->
     decode(String, []).
 
--spec decode(iodata(), decode_options()) -> term().
+-spec decode(iodata(), decode_options()) -> json_term().
 %% @doc Decode a JSON value and return its Erlang representation.
 decode(String, Options) ->
     S0 = decode_opts(decode_validate_opts(Options)),
@@ -60,12 +76,12 @@ decode(String, Options) ->
                   jeysn_ll:init_string(String, [{string, S0#ds.string}])},
     decode_value(S).
 
--spec decode_file(iodata()) -> term().
+-spec decode_file(iodata()) -> json_term().
 %% @equiv decode_file(ReadFun, [])
 decode_file(FileName) ->
     decode_file(FileName, []).
 
--spec decode_file(iodata(), decode_options()) -> term().
+-spec decode_file(iodata(), decode_options()) -> json_term().
 %% @doc Decode a JSON value in file FileName and return its Erlang
 %% representation.
 decode_file(FileName, Options) ->
@@ -78,7 +94,7 @@ decode_file(FileName, Options) ->
               more = fun () -> file:read(Fd, BufSz) end},
     decode_value(S).
 
--spec decode_io() -> term().
+-spec decode_io() -> json_term().
 %% @doc prompt for text and parse it as a JSON object
 decode_io() ->
     decode_io(
@@ -91,12 +107,12 @@ decode_io() ->
               end
       end, []).
 
--spec decode_io(read_fun()) -> term().
+-spec decode_io(read_fun()) -> json_term().
 %% @equiv decode_io(ReadFun, [])
 decode_io(ReadFun) ->
     decode_io(ReadFun, []).
 
--spec decode_io(read_fun(), decode_options()) -> term().
+-spec decode_io(read_fun(), decode_options()) -> json_term().
 %% @doc Decode a JSON value that is returned by (repeatedly) invoking
 %% ReadFun() and return its Erlang representation.
 decode_io(ReadFun, Options) ->
@@ -134,6 +150,10 @@ decode_validate_opts(Opts0) when is_list(Opts0) ->
                                       {wrap_array, array},
                                       {string, string},
                                       {name, string}]}
+                     , {{jsx_list, true}, [{object, list},
+                                           {empty_object, [{}]}]}
+                     , {{jsone_list, true}, [{object, {list, {}}},
+                                             {empty_object, []}]}
                     ]}]),
     lists:foreach(
       fun ({name, StringType}) -> assert(name, string, StringType);
@@ -181,6 +201,8 @@ decode_object(#ds{object = list} = S) ->
     end;
 decode_object(#ds{object = {list, Wrap}} = S) ->
     case decode_next(S, S#ds.name) of
+        '}' when Wrap == {} ->
+            {S#ds.empty_object};
         '}' ->
             {Wrap, S#ds.empty_object};
         Token ->
@@ -204,6 +226,9 @@ decode_object_next(S, Object) ->
             maps:from_list(Object);
         '}' when S#ds.object == list ->
             lists:reverse(Object);
+        '}' when element(1, S#ds.object) == list andalso
+                 element(2, S#ds.object) == {} ->
+            {lists:reverse(Object)};
         '}' when element(1, S#ds.object) == list ->
             {element(2, S#ds.object), lists:reverse(Object)};
         ',' ->
@@ -281,14 +306,26 @@ get_position(#ds{tokenizer = T, filename = File}) ->
           , io = undefined
          }).
 
+-spec encode(json_term()) -> iodata().
+%% @equiv encode(Term, [])
 encode(Term) ->
     encode(Term, []).
+
+-spec encode(json_term(), encode_options()) -> any().
+%% @doc Encode an Erlang term to its JSON representation and by
+%% default return it as a binary().
 encode(Term, Options) ->
     S = encode_opts(encode_validate_opts(Options)),
     encode_value_0(Term, <<>>, S).
 
+-spec encode_file(json_term(), file:name_all()) -> 'ok'.
+%% @equiv encode_file(Term, FileName, [])
 encode_file(Term, FileName) ->
     encode_file(Term, FileName, []).
+
+-spec encode_file(json_term(), file:name_all(), encode_options()) -> 'ok'.
+%% @doc Encode an Erlang term to its JSON representation and write it
+%% to the file FileName.
 encode_file(Term, FileName, Options) ->
     {ok, Fd} = file:open(FileName, [raw,binary,write]),
     try
@@ -298,13 +335,24 @@ encode_file(Term, FileName, Options) ->
         file:close(Fd)
     end.
 
+-spec encode_io(json_term()) -> 'ok'.
+%% @doc Encode an Erlang term to its JSON representation and write it
+%% to standard out.
 encode_io(Term) ->
     encode_io(Term, standard_io, []).
 
+-spec encode_io(json_term(), encode_options()) -> 'ok'.
+%% @doc Encode an Erlang term to its JSON representation and write it
+%% to standard out.
 encode_io(Term, Options) ->
     encode_io(Term, standard_io, Options).
 
--spec encode_io(term(), io:device() | write_fun(), encode_options()) -> any().
+-spec encode_io(json_term(),
+                io:device() | write_fun(),
+                encode_options()) ->
+                       any().
+%% @doc Encode an Erlang term to its JSON representation and write it
+%% to specified io device, or by invoking the supplied write function.
 encode_io(Term, standard_io, Options) when is_list(Options) ->
     encode(Term, [{io, fun io:put_chars/1}|Options]);
 encode_io(Term, WriteF, Options) when is_list(Options) andalso
@@ -393,16 +441,12 @@ encode_value([{}], Out, _L, S) ->
     emit(<<"{}">>, Out, S);
 encode_value({}, Out, _L, S) ->
     emit(<<"{}">>, Out, S);
-encode_value({struct, []}, Out, _L, S) ->
-    emit(<<"{}">>, Out, S);
+encode_value({Object}, Out, L, S) when is_list(Object) ->
+    encode_object(Object, Out, L, S);
 encode_value({struct, Object}, Out, L, S) ->
     encode_object(Object, Out, L, S);
-encode_value({object, []}, Out, _L, S) ->
-    emit(<<"{}">>, Out, S);
 encode_value({object, Object}, Out, L, S) ->
     encode_object(Object, Out, L, S);
-encode_value(Object, Out, _L, S) when map_size(Object) =:= 0 ->
-    emit(<<"{}">>, Out, S);
 encode_value(Object, Out, L, S) when is_map(Object) ->
     encode_object(Object, Out, L, S);
 encode_value(Object, Out, L, S) when tuple_size(hd(Object)) =:= 2 ->
@@ -455,6 +499,10 @@ encode_array_1([Value|Values], Out, L, S) ->
     Out2 = emit(encode_indent_or_space(<<",">>, S, L), Out1, S),
     encode_array_1(Values, Out2, L, S).
 
+encode_object([], Out, _L, S) ->
+    emit(<<"{}">>, Out, S);
+encode_object(Object, Out, _L, S) when map_size(Object) =:= 0 ->
+    emit(<<"{}">>, Out, S);
 encode_object(Object, Out, L, S) ->
     Out1 = emit(encode_indent(<<"{">>, S, L+1), Out, S),
     Out2 =
