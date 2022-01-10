@@ -237,7 +237,7 @@ Would result in
 }
 ```
 
-Note that the atom `'undefined'` is translated to `'null'`. The option
+Note that the atom `undefined` is translated to `null`. The option
 `record_undefined` can be used to change this. Either set it to
 `'remove'` to exclude all record items that are set to `undefined` or
 to any other string that you would like `undefined` be translated
