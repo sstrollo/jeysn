@@ -55,7 +55,7 @@ Eshell V12.2  (abort with ^G)
 
 Add the following `deps` to your `rebar.config`:
 
-```
+```Erlang
 {deps,
  [
   {jeysn, {git, "https://github.com/sstrollo/jeysn.git", {branch, "main"}}}
@@ -66,7 +66,7 @@ Add the following `deps` to your `rebar.config`:
 
 Add Jeysn as a dependency using:
 
-```
+```Makefile
 DEPS      = jeysn
 dep_jeysn = git https://github.com/sstrollo/jeysn.git
 ```
@@ -194,10 +194,10 @@ Jeysn can even encode records, see encode options below.
 | Option                 | Description                                                               | Default |
 |------------------------|---------------------------------------------------------------------------|---------|
 | `{'space', N::0..}`    | Add N spaces after commas and colon                                       | `0`     |
-| `space`                | Equivalent to `{space, 1}`                                                |         |
-| `{indent, N::0..}`     | When N > 0, add a newline and indent N spaces for every level             | `0`     |
-| `nl`                   | When indenting, add a trailing newline after the last item                | `false` |
-| `pretty`               | Equivalent to `[{space, 1}, {indent, 2}, {nl, true}]`                     |         |
+| `'space'`              | Equivalent to `{space, 1}`                                                |         |
+| `{'indent', N::0..}`   | When N > 0, add a newline and indent N spaces for every level             | `0`     |
+| `'nl'`                 | When indenting, add a trailing newline after the last item                | `false` |
+| `'pretty'`             | Equivalent to `[{space, 1}, {indent, 2}, {nl, true}]`                     |         |
 | `'list_may_be_string'` | A list is treated as a string if `io_lib:printable_list()` returns `true` | `false` |
 
 #### Encoding records
@@ -212,7 +212,7 @@ information in a map to the encode function. For example, given:
 
 Then the following:
 
-```
+```Erlang
     Term = #foo{d = #bar{boo = <<"hello">>}},
 
     RI = #{foo => record_info(fields, foo),
