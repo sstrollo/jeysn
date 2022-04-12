@@ -20,7 +20,7 @@
 
 %% ------------------------------------------------------------------------
 
--opaque jeysn_tokenizer() :: <<>>.
+-opaque jeysn_tokenizer() :: reference().
 -export_type([jeysn_tokenizer/0]).
 
 -type init_options() :: [init_option()] | init_option().

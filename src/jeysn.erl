@@ -327,8 +327,10 @@ decode_error(#ds{tokenizer = T, filename = File}, Got, Expected) ->
 
 -spec decode_error(any(), any(), string(),
                    non_neg_integer(), non_neg_integer()) -> no_return().
+decode_error({error, _ErrStr, _Info} = Err, _Expected, _File, _Line, _Col) ->
+    erlang:error(Err);
 decode_error(Got, Expected, File, Line, Col) ->
-    io:format("~s:~w:~w: Error: got ~p expected: ~w\n",
+    io:format(standard_error, "~s:~w:~w: Error: got ~p expected: ~w\n",
               [File, Line, Col, Got, Expected]),
     erlang:error(syntax).
 
