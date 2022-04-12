@@ -19,7 +19,7 @@ implemented as a NIF (written in plain C).
 ```
 
 ```
- cat test/t.json
+% cat test/t.json
 {
   "foo": [1, 2, 3, 4],
   "bar": true,
@@ -129,7 +129,7 @@ The default is to return lists
 | Option                                                | Description                                                               |
 |-------------------------------------------------------|---------------------------------------------------------------------------|
 | `{'string', 'binary' \| 'string' \| 'existing_atom'}` | Decode JSON strings to one of these formats                               |
-| `{'name, 'binary' \| 'string' \| 'existing_atom'}`    | Decode the name portion of a JSON name-value pair to one of these formats |
+| `{'name', 'binary' \| 'string' \| 'existing_atom'}`   | Decode the name portion of a JSON name-value pair to one of these formats |
 | `{'object', 'map'}`                                   | Decode a JSON object to an Erlang map (the default)                       |
 | `{'object', 'list'}`                                  | Decode a JSON object to a property list                                   |
 
