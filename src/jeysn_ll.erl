@@ -8,7 +8,7 @@
 
 -export([init/0, init/1, init_string/1, init_string/2]).
 -export([data/2, eof/1]).
--export([get_position/1, get_token_position/1, get_remaining_data/1]).
+-export([get_position_info/1, get_token_position/1, get_remaining_data/1]).
 -export([next_token/1, next_token/2]).
 
 -export([encode_string/1, escape_string/1]).
@@ -80,9 +80,11 @@ eof(Tokenizer) ->
 -type string_format() :: string_format_type() | {string_format_type(), 0..127}.
 -type string_format_type() :: 'binary' | 'string' | 'atom' | 'existing_atom'.
 
+-type json_token_error() :: {'error', InfoString :: binary(), position_info()}.
+
 -spec next_token(jeysn_tokenizer(), string_format()) ->
                         json_token()
-                      | {'error', json_token()|'error', position()}
+                      | json_token_error()
                       | 'more'
                       | 'eof'
                       .
@@ -110,14 +112,15 @@ string_format_internal('existing_atom') -> 3.
                      Line   :: non_neg_integer(),
                      Column :: non_neg_integer()}.
 
--spec get_position(jeysn_tokenizer()) ->
-                          {position(), Before::binary(), After::binary()}.
+-type position_info() :: {position(), Before::binary(), After::binary()}.
+
+-spec get_position_info(jeysn_tokenizer()) -> position_info().
 %% @doc Return the current position of the tokenizer.
-get_position(_Tokenizer) ->
+get_position_info(_Tokenizer) ->
     nif_only().
 
 -spec get_token_position(jeysn_tokenizer()) -> position().
-%% @doc Return the position of the latest returned token.
+%% @doc Return the position of the last returned token.
 get_token_position(_Tokenizer) ->
     nif_only().
 
@@ -129,11 +132,6 @@ get_remaining_data(_Tokenizer) ->
 
 debug(_x) ->
     ok.
-
-%% format_json_error(#json_error{} = Err) ->
-%%     ErrStr = json_error_code_to_string(Err),
-%%     io_lib:format("~s:~w:~w: ~s: ~s",
-%%                   [Err#json_error.
 
 %% ------------------------------------------------------------------------
 

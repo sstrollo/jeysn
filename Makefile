@@ -6,7 +6,10 @@ docs: rebar3
 	./rebar3 edoc
 
 eunit: rebar3
-	./rebar3 eunit
+	./rebar3 $@
+
+dialyzer: rebar3
+	./rebar3 $@
 
 proper: rebar3
 	./rebar3 proper -n 5000
@@ -22,7 +25,7 @@ erl: rebar3
 rebar3:
 	curl -Os "https://s3.amazonaws.com/$@/$@" && chmod +x $@
 
-.PHONY: all docs eunit proper tests erl
+.PHONY: all docs eunit dialyzer proper tests erl
 
 
 clean:

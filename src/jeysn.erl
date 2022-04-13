@@ -12,6 +12,8 @@
 -export([encode_file/2, encode_file/3]).
 -export([encode_io/1, encode_io/2, encode_io/3]).
 
+-export([format_error/1]).
+
 %% ------------------------------------------------------------------------
 
 -type decode_options() :: [decode_option()] | decode_option() | map().
@@ -50,6 +52,13 @@
 %% An Erlang term representing a JSON value.
 %% TODO: better spec
 
+-type jeysn_error() ::
+        {'jeysn',
+         FileName     :: binary(),
+         PositionInfo :: jeysn_ll:position_info(),
+         Error        :: term()
+        }.
+
 %% ------------------------------------------------------------------------
 -record(ds, {
           tokenizer
@@ -64,12 +73,18 @@
          }).
 
 
--spec decode(iodata()) -> json_term().
+-spec decode(String :: iodata()) ->
+          {'ok', json_term()}
+              | {'ok', json_term(), RemainingData :: binary()}
+              | {'error', jeysn_error()}.
 %% @equiv decode(String, [])
 decode(String) ->
     decode(String, []).
 
--spec decode(iodata(), decode_options()) -> json_term().
+-spec decode(String :: iodata(), Options :: decode_options()) ->
+          {'ok', json_term()}
+              | {'ok', json_term(), RemainingData :: binary()}
+              | {'error', jeysn_error()}.
 %% @doc Decode a JSON value and return its Erlang representation.
 decode(String, Options) ->
     S0 = decode_opts(decode_validate_opts(Options)),
@@ -77,25 +92,41 @@ decode(String, Options) ->
                   jeysn_ll:init_string(String, [{string, S0#ds.string}])},
     decode_value_0(S).
 
--spec decode_file(iodata()) -> json_term().
+-spec decode_file(Filename :: file:name_all()) ->
+          {'ok', json_term()}
+              | {'ok', json_term(), RemainingData :: binary()}
+              | {'error', Reason} when
+      Reason :: jeysn_error() | file:posix() | 'badarg' | 'system_limit'.
 %% @equiv decode_file(ReadFun, [])
 decode_file(FileName) ->
     decode_file(FileName, []).
 
--spec decode_file(iodata(), decode_options()) -> json_term().
+-spec decode_file(Filename :: file:name_all(), Options :: decode_options()) ->
+          {'ok', json_term()}
+              | {'ok', json_term(), RemainingData :: binary()}
+              | {'error', Reason} when
+      Reason :: jeysn_error() | file:posix() | 'badarg' | 'system_limit'.
 %% @doc Decode a JSON value in file FileName and return its Erlang
 %% representation.
 decode_file(FileName, Options) ->
     Opts = decode_validate_opts(Options),
     BufSz = proplists:get_value(buffer_size, Opts, 64*1024), % 8192,
-    {ok, Fd} = file:open(FileName, [read,binary,raw]),
-    S0 = decode_opts(Opts),
-    S = S0#ds{tokenizer = jeysn_ll:init([{string, S0#ds.string}]),
-              filename = FileName,
-              more = fun () -> file:read(Fd, BufSz) end},
-    decode_value_0(S).
+    case file:open(FileName, [read,binary,raw]) of
+        {ok, Fd} ->
+            S0 = decode_opts(Opts),
+            S = S0#ds{tokenizer = jeysn_ll:init([{string, S0#ds.string}]),
+                      filename = FileName,
+                      more = fun () -> file:read(Fd, BufSz) end},
+            decode_value_0(S);
+        {error, _Reson} = Error ->
+            Error
+    end.
 
--spec decode_io() -> json_term().
+-spec decode_io() ->
+          {'ok', json_term()}
+              | {'ok', json_term(), RemainingData :: binary()}
+              | {'error', Reason} when
+      Reason :: jeysn_error() | term().
 %% @doc prompt for text and parse it as a JSON object
 decode_io() ->
     decode_io(
@@ -108,12 +139,20 @@ decode_io() ->
               end
       end, []).
 
--spec decode_io(read_fun()) -> json_term().
+-spec decode_io(ReadFun :: read_fun()) ->
+          {'ok', json_term()}
+              | {'ok', json_term(), RemainingData :: binary()}
+              | {'error', Reason} when
+      Reason :: jeysn_error() | term().
 %% @equiv decode_io(ReadFun, [])
 decode_io(ReadFun) ->
     decode_io(ReadFun, []).
 
--spec decode_io(read_fun(), decode_options()) -> json_term().
+-spec decode_io(ReadFun :: read_fun(), Options :: decode_options()) ->
+          {'ok', json_term()}
+              | {'ok', json_term(), RemainingData :: binary()}
+              | {'error', Reason} when
+      Reason :: jeysn_error() | term().
 %% @doc Decode a JSON value that is returned by (repeatedly) invoking
 %% ReadFun() and return its Erlang representation.
 decode_io(ReadFun, Options) ->
@@ -171,17 +210,21 @@ decode_validate_opts(Opt) ->
 %% ------------------------------------------------------------------------
 
 decode_value_0(S) ->
-    Value = decode_value(S),
-    decode_trailing_data(S, Value).
+    case decode_value(S) of
+        {error, _} = Error ->
+            Error;
+        Value ->
+            decode_trailing_data(S, Value)
+    end.
 
 decode_trailing_data(#ds{trailing_data = ignore}, Value) ->
-    Value;
+    {ok, Value};
 decode_trailing_data(#ds{trailing_data = return} = S, Value) ->
     {ok, Value, jeysn_ll:get_remaining_data(S#ds.tokenizer)};
 decode_trailing_data(#ds{trailing_data = error} = S, Value) ->
     case jeysn_ll:get_remaining_data(S#ds.tokenizer) of
         eof ->
-            Value;
+            {ok, Value};
         <<>> ->
             %% There is no more non-whitespace data, but the read
             %% function has not yet returned eof, continue invoking it
@@ -193,8 +236,8 @@ decode_trailing_data(#ds{trailing_data = error} = S, Value) ->
                     Error
             end;
         Data ->
-            {{_, Line, Col}, _, _} = jeysn_ll:get_position(S#ds.tokenizer),
-            decode_error(Data, [eof], S#ds.filename, Line, Col)
+            PositionInfo = jeysn_ll:get_position_info(S#ds.tokenizer),
+            mk_jeysn_error(S#ds.filename, PositionInfo, {trailing_data, Data})
     end.
 
 %% ------------------------------------------------------------------------
@@ -243,8 +286,12 @@ decode_object(#ds{object = {list, Wrap}} = S) ->
 decode_object_pair(S, {string, Name}, Object) ->
     case decode_next(S) of
         ':' ->
-            Value = decode_value(S),
-            decode_object_next(S, [{Name, Value}|Object]);
+            case decode_value(S) of
+                {error, _} = Error ->
+                    Error;
+                Value ->
+                    decode_object_next(S, [{Name, Value}|Object])
+            end;
         Other ->
             decode_error(S, Other, [':'])
     end;
@@ -275,8 +322,12 @@ decode_array(S) ->
         ']' ->
             {S#ds.wrap_array, []};
         Token ->
-            Value = decode_value(S, Token),
-            decode_array_next(S, [Value])
+            case decode_value(S, Token) of
+                {error, _} = Error ->
+                    Error;
+                Value ->
+                    decode_array_next(S, [Value])
+            end
     end.
 
 decode_array_next(S, Array) ->
@@ -286,8 +337,12 @@ decode_array_next(S, Array) ->
         ']' ->
             {S#ds.wrap_array, lists:reverse(Array)};
         ',' ->
-            Value = decode_value(S),
-            decode_array_next(S, [Value|Array]);
+            case decode_value(S) of
+                {error, _} = Error ->
+                    Error;
+                Value ->
+                    decode_array_next(S, [Value|Array])
+            end;
         Other ->
             decode_error(S, Other, [']', ','])
     end.
@@ -301,7 +356,7 @@ decode_next(S, StrFmt) ->
             case decode_more(S) of
                 ok ->
                     decode_next(S, StrFmt);
-                {error, _, _} = Error ->
+                {error, _} = Error ->
                     Error
             end;
         {number, IntegerBinary} ->
@@ -316,23 +371,53 @@ decode_more(S) ->
             jeysn_ll:data(S#ds.tokenizer, Data);
         eof ->
             jeysn_ll:eof(S#ds.tokenizer);
-        {error, _} = _Err ->
-            {error, more_error, jeysn_ll:get_position(S#ds.tokenizer)}
+        {error, Error} ->
+            PositionInfo = jeysn_ll:get_position_info(S#ds.tokenizer),
+            mk_jeysn_error(S#ds.filename, PositionInfo, {more, Error})
     end.
 
--spec decode_error(#ds{}, any(), any()) -> no_return().
-decode_error(#ds{tokenizer = T, filename = File}, Got, Expected) ->
-    {_, Line, Col} = jeysn_ll:get_token_position(T),
-    decode_error(Got, Expected, File, Line, Col).
+-spec decode_error(#ds{}, TokenOrError, Expected) ->
+          {'error', jeysn_error()} when
+      TokenOrError :: jeysn_ll:json_token() | jeysn_ll:json_token_error(),
+      Expected     :: [ atom() ].
 
--spec decode_error(any(), any(), string(),
-                   non_neg_integer(), non_neg_integer()) -> no_return().
-decode_error({error, _ErrStr, _Info} = Err, _Expected, _File, _Line, _Col) ->
-    erlang:error(Err);
-decode_error(Got, Expected, File, Line, Col) ->
-    io:format(standard_error, "~s:~w:~w: Error: got ~p expected: ~w\n",
-              [File, Line, Col, Got, Expected]),
-    erlang:error(syntax).
+
+decode_error(#ds{filename = File}, {error, InfoStr, PosInfo}, _Expected) ->
+    mk_jeysn_error(File, PosInfo, {scan, InfoStr});
+decode_error(#ds{tokenizer = T, filename = File}, Token, Expected) ->
+    Position = jeysn_ll:get_token_position(T),
+    PositionInfo = {Position, <<>>, <<>>},
+    Error = {unexpected, Token, Expected},
+    mk_jeysn_error(File, PositionInfo, Error).
+
+mk_jeysn_error(FileName, PositionInfo, Error) ->
+    {error, {jeysn, FileName, PositionInfo, Error}}.
+
+%% ------------------------------------------------------------------------
+
+format_error({error, Error}) ->
+    format_error(Error);
+format_error({jeysn, FileName, PositionInfo, Error}) ->
+    iolist_to_binary(
+      [format_postion(FileName, PositionInfo),
+       " Error: ",
+       format_jeysn_error(Error)]);
+format_error(Atom) when is_atom(Atom) ->
+    file:format_error(Atom).
+
+format_postion(FileName, {{_Offset, Line, Col}, _Before, _After}) ->
+    io_lib:format("~s:~w:~w:", [FileName, Line, Col]).
+
+format_jeysn_error({unexpected, What, Expected}) ->
+    io_lib:format("got ~0p expected ~w", [What, Expected]);
+format_jeysn_error({scan, String}) ->
+    io_lib:format("while scanning: ~s", [String]);
+format_jeysn_error({more, Error}) ->
+    io_lib:format("while trying to get more bytes: ~s", [format_error(Error)]);
+format_jeysn_error({trailing_data, _Data}) ->
+    "trailing data after JSON term";
+format_jeysn_error(Err) ->
+    io_lib:format("~0p", [Err]).
 
 %% ------------------------------------------------------------------------
 

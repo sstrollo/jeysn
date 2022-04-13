@@ -4,7 +4,7 @@ main([File]) ->
     init(),
     try
         io:format("processing ~s... ", [File]),
-        _Term = jeysn:decode_file(File),
+        {ok, _Term} = jeysn:decode_file(File),
         io:format("ok\n", []),
         %%io:format("~p\n", [_Term]),
         halt(0)
@@ -19,11 +19,11 @@ main([File]) ->
 main(["double", File]) ->
     init(),
     try
-        Term = jeysn:decode_file(File),
+        {ok, Term} = jeysn:decode_file(File),
         io:format("~p\n", [Term]),
         String = iolist_to_binary(jeysn:encode(Term)),
         io:format("~s\n", [String]),
-        Term = jeysn:decode(String),
+        {ok, Term} = jeysn:decode(String),
         halt(0)
     catch
         error:syntax ->
@@ -39,7 +39,7 @@ main(Files) ->
       fun (File) ->
               io:format("processing ~s... ", [File]),
               try
-                  _Term = jeysn:decode_file(File),
+                  {ok, _Term} = jeysn:decode_file(File),
                   io:format("ok\n", [])
               catch
                   _X:_Y ->

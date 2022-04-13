@@ -181,7 +181,7 @@ test_number(N) when is_integer(N) ->
     ok.
 
 expect_token(String, Expect) ->
-    %%io:format("string: ~999p expecting: ~999p ... ", [String, Expect]),
+    %%io:format("string: ~0p expecting: ~0p ... ", [String, Expect]),
     State = jeysn_ll:init_string(String),
     Expect = jeysn_ll:next_token(State),
     eof = jeysn_ll:next_token(State),

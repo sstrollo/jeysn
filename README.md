@@ -10,8 +10,10 @@ implemented as a NIF (written in plain C).
 ## Examples
 
 ```
-1> V = jeysn:decode(<<"{\"foo\": 42, \"bar\": null, \"baz\": [1,2,3]}">>).
-#{<<"bar">> => null,<<"baz">> => [1,2,3],<<"foo">> => 42}
+1> {ok, V} = jeysn:decode(<<"{\"foo\": 42, \"bar\": null, \"baz\": [1,2,3]}">>).
+{ok,#{<<"bar">> => null,
+      <<"baz">> => [1,2,3],
+      <<"foo">> => 42}}
 2> Compact = jeysn:encode(V).
 <<"{\"bar\":null,\"baz\":[1,2,3],\"foo\":42}">>
 3> Pretty = jeysn:encode(V, [pretty]).
@@ -31,22 +33,21 @@ implemented as a NIF (written in plain C).
 }
 
 % rebar3 shell
-
-Eshell V12.2  (abort with ^G)
+...
 1> jeysn:decode_file("test/t.json").
-#{<<"Z">> => null,<<"bar">> => true,
-  <<"foo">> => [1,2,3,4],
-  <<"x">> => false,<<"y">> => #{},
-  <<"z">> => #{<<"1">> => <<"a">>,<<"2">> => <<"b">>},
-  <<"zzz">> => <<"aaa">>}
+{ok,#{<<"Z">> => null,<<"bar">> => true,
+      <<"foo">> => [1,2,3,4],
+      <<"x">> => false,<<"y">> => #{},
+      <<"z">> => #{<<"1">> => <<"a">>,<<"2">> => <<"b">>},
+      <<"zzz">> => <<"aaa">>}}
 2> jeysn:decode_file("test/t.json", [{object, list}]).
-[{<<"foo">>,[1,2,3,4]},
- {<<"bar">>,true},
- {<<"x">>,false},
- {<<"y">>,[{}]},
- {<<"z">>,[{<<"1">>,<<"a">>},{<<"2">>,<<"b">>}]},
- {<<"zzz">>,<<"aaa">>},
- {<<"Z">>,null}]
+{ok,[{<<"foo">>,[1,2,3,4]},
+     {<<"bar">>,true},
+     {<<"x">>,false},
+     {<<"y">>,[{}]},
+     {<<"z">>,[{<<"1">>,<<"a">>},{<<"2">>,<<"b">>}]},
+     {<<"zzz">>,<<"aaa">>},
+     {<<"Z">>,null}]}
 ```
 
 ## Using in your project
@@ -116,14 +117,36 @@ The default is to return lists
 #### Exported decode functions
 
 ```Erlang
--spec decode(String::iodata()) -> json_term().
--spec decode(String::iodata(), Options::decode_options()) -> json_term().
+-spec decode(String :: iodata()) ->
+          {'ok', json_term()}
+              | {'ok', json_term(), RemainingData :: binary()}
+              | {'error', jeysn_error()}.
+-spec decode(String :: iodata(), Options :: decode_options()) ->
+          {'ok', json_term()}
+              | {'ok', json_term(), RemainingData :: binary()}
+              | {'error', jeysn_error()}.
 
--spec decode_file(FileName::iodata()) -> json_term().
--spec decode_file(iodata(), Options::decode_options()) -> json_term().
+-spec decode_file(Filename :: file:name_all()) ->
+          {'ok', json_term()}
+              | {'ok', json_term(), RemainingData :: binary()}
+              | {'error', Reason} when
+      Reason :: jeysn_error() | file:posix() | 'badarg' | 'system_limit'.
+-spec decode_file(Filename :: file:name_all(), Options :: decode_options()) ->
+          {'ok', json_term()}
+              | {'ok', json_term(), RemainingData :: binary()}
+              | {'error', Reason} when
+      Reason :: jeysn_error() | file:posix() | 'badarg' | 'system_limit'.
 
--spec decode_io(read_fun()) -> json_term().
--spec decode_io(read_fun(), Options::decode_options()) -> json_term().
+-spec decode_io(ReadFun :: read_fun()) ->
+          {'ok', json_term()}
+              | {'ok', json_term(), RemainingData :: binary()}
+              | {'error', Reason} when
+      Reason :: jeysn_error() | term().
+-spec decode_io(ReadFun :: read_fun(), Options :: decode_options()) ->
+          {'ok', json_term()}
+              | {'ok', json_term(), RemainingData :: binary()}
+              | {'error', Reason} when
+      Reason :: jeysn_error() | term().
 ```
 
 | Option                                                | Description                                                               |
@@ -137,7 +160,7 @@ Example:
 
 ```Erlang
 jeysn:decode(<<"{\"jeysn\": true, \"foobarbaz\": 42}">>, [{object,list},{name, existing_atom}]).
-[{jeysn,true},{<<"foobarbaz">>,42}]
+{ok,[{jeysn,true},{<<"foobarbaz">>,42}]}
 ```
 
 

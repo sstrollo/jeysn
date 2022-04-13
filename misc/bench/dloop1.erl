@@ -108,7 +108,7 @@ next_token(S, StrFmt) ->
                     next_token(S, StrFmt);
                 {error, _} = _Err ->
                     {error, more_error,
-                     jeysn_ll:get_position(S#bench.tokenizer)}
+                     jeysn_ll:get_position_info(S#bench.tokenizer)}
             end;
         {number, IntegerBinary} ->
             binary_to_integer(IntegerBinary);

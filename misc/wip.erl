@@ -35,7 +35,7 @@ floop(State, ReadF, Res) ->
 %            io:format("Debug: ~p\n", [_Debug]),
             lists:reverse(Res);
         {error, Error} ->
-            {error, Error, jeysn_ll:get_position(State)};
+            {error, Error, jeysn_ll:get_position_info(State)};
         Token ->
             io:format("Token: ~p\n", [Token]),
             floop(State, ReadF, [Token|Res])
@@ -178,7 +178,7 @@ tokenize(S, Tokens, Token) ->
 %%                     decode_get_token(S, StrFmt);
 %%                 {error, _} = _Err ->
 %%                     {error, more_error,
-%%                      jeysn_ll:get_position(S#ds.tokenizer)}
+%%                      jeysn_ll:get_position_info(S#ds.tokenizer)}
 %%             end;
 %%         {number, IntegerBinary} ->
 %%             binary_to_integer(IntegerBinary);

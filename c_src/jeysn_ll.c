@@ -282,7 +282,7 @@ static ERL_NIF_TERM data(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 }
 
 static ERL_NIF_TERM
-get_position(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+get_position_info(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
     jeysn_state_t *ejs = NULL;
     if (!get_jeysn_state_t(env, argv[0], &ejs)) {
@@ -459,7 +459,7 @@ static ErlNifFunc nif_funcs[] = {
     , {"next_token_nif", 1, next_token}
     , {"next_token_nif", 2, next_token}
     , {"data", 2, data}
-    , {"get_position", 1, get_position}
+    , {"get_position_info", 1, get_position_info}
     , {"get_token_position", 1, get_token_position}
     , {"get_remaining_data", 1, get_remaining_data}
     , {"debug", 1, debug}

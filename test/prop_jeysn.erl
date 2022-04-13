@@ -148,7 +148,7 @@ prop_skip_invalid_escape_sequence() ->
                 String = lists:flatten([Pre,Seq,Post]),
                 JSON_Value = [$", String, $"],
 %%             io:format("\n~w ~w\n", [String, jeysn:decode(JSON_Value,json2)]),
-                String == jeysn:decode(JSON_Value, [json2])
+                {ok, String} == jeysn:decode(JSON_Value, [json2])
             end).
 
 prop_skip_invalid_escape_u_sequence() ->
@@ -160,7 +160,7 @@ prop_skip_invalid_escape_u_sequence() ->
                 String = lists:flatten([Pre,Seq,Post]),
                 JSON_Value = [$", String, $"],
 %%             io:format("\n~w ~w\n", [String, jeysn:decode(JSON_Value,json2)]),
-                String == jeysn:decode(JSON_Value, json2)
+                {ok, String} == jeysn:decode(JSON_Value, json2)
             end).
 
 %%-type json_ws_char() :: 16#20 | 16#09 | 16#0a | 16#0d.
@@ -173,7 +173,7 @@ prop_decode() ->
             begin
                 Str = encode_value(V),
 %%                io:format("\n\n~s\n\n", [Str]),
-                jeysn:decode(Str, json2) == V
+                jeysn:decode(Str, json2) == {ok, V}
             end).
 
 prop_decode_ws() ->
@@ -183,7 +183,7 @@ prop_decode_ws() ->
                 Str = encode_value(V, WS),
 %%                io:format("\n\n~s\n\n", [Str]),
 %%                io:format("\n~w\n", [Space]),
-                jeysn:decode(Str, json2) == V
+                jeysn:decode(Str, json2) == {ok, V}
             end).
 
 test_str() ->
@@ -192,8 +192,8 @@ test_str() ->
 prop_test() ->
     ?FORALL(Str, test_str(),
             begin
-                _Term = jeysn:decode(Str, json2),
-%%                io:format("\n\nStr: ~s\nTerm: ~9999p\n\n", [Str, _Term]),
+                {ok, _Term} = jeysn:decode(Str, json2),
+%%                io:format("\n\nStr: ~s\nTerm: ~0p\n\n", [Str, _Term]),
                 true
             end).
 
@@ -230,7 +230,8 @@ chopped(String, ChunkSize) ->
                 end
         end,
     try
-        jeysn:decode_io(ReadF, json2)
+        {ok, JSON} = jeysn:decode_io(ReadF, json2),
+        JSON
     after
         erase(Ref)
     end.

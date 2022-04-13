@@ -6,9 +6,9 @@ files_test() ->
     JSONFiles = json_files("."),
     lists:foreach(
       fun (File) ->
-              Term = jeysn:decode_file(File),
+              {ok, Term} = jeysn:decode_file(File),
               String = iolist_to_binary(jeysn:encode(Term)),
-              Term = jeysn:decode(String),
+              {ok, Term} = jeysn:decode(String),
               ok
       end, JSONFiles),
     ok.
@@ -44,13 +44,13 @@ records_test() ->
 
     DOpts = [{object,list},{name,existing_atom}],
 
-    [{a,42},{b,false},{c,null},{d,<<"hello">>},{e,null}] =
+    {ok, [{a,42},{b,false},{c,null},{d,<<"hello">>},{e,null}]} =
         jeysn:decode(B1, DOpts),
 
-    [{a,42},{b,false},{c,null},{d,<<"hello">>},{e,false}] =
+    {ok, [{a,42},{b,false},{c,null},{d,<<"hello">>},{e,false}]} =
         jeysn:decode(B2, DOpts),
 
-    [{a,42},{b,false},{c,null},{d,<<"hello">>}] =
+    {ok, [{a,42},{b,false},{c,null},{d,<<"hello">>}]} =
         jeysn:decode(B3, DOpts),
 
 
@@ -64,11 +64,12 @@ records_test() ->
 
     B4 = jeysn:encode(A, [{records, RI1}]),
 
-    [[{a,42},{b,false},{c,null},{d,<<"hello">>},{e,null}],
-     [{a,42},{b,true},{c,[1,2,3]},{d,[{boo,<<"boo">>},{baz,null},{bing,null}]},
-      {e,[{a,42},{b,false},{c,null},{d,<<"hello">>},{e,null}]}],
-     [{boo,1},{baz,2},{bing,3}]] =
-        Term = jeysn:decode(B4, DOpts),
+    {ok,
+     [[{a,42},{b,false},{c,null},{d,<<"hello">>},{e,null}],
+      [{a,42},{b,true},{c,[1,2,3]},{d,[{boo,<<"boo">>},{baz,null},{bing,null}]},
+       {e,[{a,42},{b,false},{c,null},{d,<<"hello">>},{e,null}]}],
+      [{boo,1},{baz,2},{bing,3}]]} =
+        {ok, Term} = jeysn:decode(B4, DOpts),
 
     B4 = jeysn:encode(Term),
 
@@ -77,9 +78,9 @@ records_test() ->
 trailing_test() ->
     Data = <<"[1] 42">>,
 
-    {'EXIT', {syntax, _}} = (catch jeysn:decode(Data)),
+    %% {'EXIT', {syntax, _}} = (catch jeysn:decode(Data)),
 
-    [1] = jeysn:decode(Data, [{trailing_data, ignore}]),
+    {ok, [1]} = jeysn:decode(Data, [{trailing_data, ignore}]),
 
     {ok, [1], <<"42">>} = jeysn:decode(Data, [{trailing_data, return}]),
 
