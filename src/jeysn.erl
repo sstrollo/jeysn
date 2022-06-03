@@ -113,11 +113,15 @@ decode_file(FileName, Options) ->
     BufSz = proplists:get_value(buffer_size, Opts, 64*1024), % 8192,
     case file:open(FileName, [read,binary,raw]) of
         {ok, Fd} ->
-            S0 = decode_opts(Opts),
-            S = S0#ds{tokenizer = jeysn_ll:init([{string, S0#ds.string}]),
-                      filename = FileName,
-                      more = fun () -> file:read(Fd, BufSz) end},
-            decode_value_0(S);
+            try
+                S0 = decode_opts(Opts),
+                S = S0#ds{tokenizer = jeysn_ll:init([{string, S0#ds.string}]),
+                          filename = FileName,
+                          more = fun () -> file:read(Fd, BufSz) end},
+                decode_value_0(S)
+            after
+                file:close(Fd)
+            end;
         {error, _Reson} = Error ->
             Error
     end.
