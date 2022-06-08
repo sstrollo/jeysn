@@ -426,7 +426,7 @@ static int atload(ErlNifEnv* env, void** priv_data, ERL_NIF_TERM load_info)
 {
     ErlNifResourceType* st;
 
-    st = enif_open_resource_type(env, "jeysn", "state",
+    st = enif_open_resource_type(env, NULL, "jeysn_state",
                                  destroy_state,
                                  ERL_NIF_RT_CREATE, NULL);
     if (st == NULL)
