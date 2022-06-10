@@ -298,14 +298,9 @@ need that one day in the future too...)
 
 ## Contributing
 
-I'm happy to take pull requests, bug reports, and feature
-requests. But please be aware that until I release 1.0 the API is
-still shifting around a bit.
+I'm happy to take pull requests, bug reports, and feature requests.
 
 ## Roadmap
-
-- Decide on the API (function names, returns - wrapped vs exceptions)
-  and release version 1.0
 
 - Make sure jeysn is usable from Elixir
 

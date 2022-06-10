@@ -1,6 +1,6 @@
 {application, jeysn,
  [{description, "Erlang JSON interface"},
-  {vsn, "0.9.1"},
+  {vsn, "1.0"},
   {modules, []},
   {registered, []},
   {env, []},
