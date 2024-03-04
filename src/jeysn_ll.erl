@@ -22,6 +22,8 @@
 
 -opaque jeysn_tokenizer() :: reference().
 -export_type([jeysn_tokenizer/0]).
+-export_type([json_token/0, json_token_error/0]).
+-export_type([position_info/0]).
 
 -type init_options() :: [init_option()] | init_option().
 -type init_option() :: {'string', string_format()}.
