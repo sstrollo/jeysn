@@ -291,7 +291,7 @@ A number of years ago I wanted to be able to parse XML and JSON using
 the same grammar, and using a saxing parser to support the grammar. I
 started looking at [Expat](https://github.com/libexpat/libexpat) and
 wrapped it in a NIF, and when it came to JSON I wrote my own tiny JSON
-tokenizer in C. I never got around to publish it, but now I needed the
+tokenizer in C. I never got around to publish it until one day, I needed the
 JSON parser, so I cleaned the original implementation up and called it
 Jeysn. (The Expat wrapper is still in my desktop drawer, maybe I'll
 need that one day in the future too...)
@@ -299,13 +299,9 @@ need that one day in the future too...)
 ## Contributing
 
 I'm happy to take pull requests, bug reports, and feature
-requests. But please be aware that until I release 1.0 the API is
-still shifting around a bit.
+requests.
 
 ## Roadmap
-
-- Decide on the API (function names, returns - wrapped vs exceptions)
-  and release version 1.0
 
 - Make sure jeysn is usable from Elixir
 

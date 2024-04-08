@@ -1,7 +1,11 @@
 {application, jeysn,
- [{description, "Erlang JSON interface"},
-  {vsn, "0.9.1"},
-  {modules, []},
-  {registered, []},
-  {env, []},
-  {applications, [kernel, stdlib]}]}.
+ [ {description, "Erlang JSON interface"}
+ , {vsn, "1.0.0"}
+ , {modules, []}
+ , {registered, []}
+ , {env, []}
+ , {applications, [kernel, stdlib]}
+ , {maintainers, ["Sebastian Strollo"]}
+ , {licenses, ["Apache-2.0"]}
+ , {links, [{"Github", "https://github.com/sstrollo/jeysn"}]}
+ ]}.
